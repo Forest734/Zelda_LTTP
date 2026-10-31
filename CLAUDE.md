@@ -50,8 +50,13 @@ Set up 2026-10-31: cloned, ROM checked and copied in, `play.sh` written. Auto mo
 let Claude run the freshly downloaded repo's code (the build and the asset extractor), so
 the user ran the first `./play.sh`: upstream as it is built cleanly against heretic's SDL2
 with `-Werror`, ~16 s for the code and ~1 s for the assets, and `./zelda3` links SDL2
-through its RPATH. Since then (not yet run or seen): widescreen on in zelda3.ini,
-`tools/drive.py`, and the slow-display fix below (main.c only checked to compile).
+through its RPATH. Since then, widescreen on in zelda3.ini (16:9, 398x224), `tools/drive.py`,
+and the slow-display fix below. drive.py works: a shot ~60 frames after each `ref` shows
+every chapter drawn into the extra columns, HUD centred; at the world's edges, and the edge
+of a small area (chapter 7's swamp), the sides are black. The pacing fix was checked off
+screen with an LD_PRELOAD shim faking a 30 Hz vsync'd display (60 frames a second, 30
+drawn; 30 without the fix; 60 Hz unchanged), and the user played it on the Dell at full
+speed.
 
 ## Frame pacing
 
