@@ -437,6 +437,7 @@
     </ClCompile>
     <ClCompile Include="src\tile_detect.c" />
     <ClCompile Include="src\util.c" />
+    <ClCompile Include="src\widescreen.c" />
     <ClCompile Include="src\zelda_cpu_infra.c" />
     <ClCompile Include="src\zelda_rtl.c" />
   </ItemGroup>
@@ -740,6 +741,7 @@
     <ClInclude Include="src\tile_detect.h" />
     <ClInclude Include="src\types.h" />
     <ClInclude Include="src\util.h" />
+    <ClInclude Include="src\widescreen.h" />
     <ClInclude Include="src\variables.h" />
     <ClInclude Include="src\zelda_cpu_infra.h" />
     <ClInclude Include="src\zelda_rtl.h" />

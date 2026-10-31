@@ -11,6 +11,7 @@
 #include "util.h"
 #include "audio.h"
 #include "assets.h"
+#include "widescreen.h"  // [lttp]
 ZeldaEnv g_zenv;
 uint8 g_ram[131072];
 
@@ -154,6 +155,12 @@ static void ConfigurePpuSideSpace() {
       extra_left = BG2HOFS_copy2 - ow_scroll_vars0.xstart;
       extra_right = ow_scroll_vars0.xend - BG2HOFS_copy2;
       extra_bottom = ow_scroll_vars0.yend - BG2VOFS_copy2;
+      if (Widescreen_OverworldShowsNeighbors()) {
+        // [lttp] past the area's edges its neighbours, on to the world's edges
+        extra_left = BG2HOFS_copy2;
+        extra_right = IntMax(0x1000 - 256 - BG2HOFS_copy2, 0);
+        extra_bottom = IntMax(0x1000 - 224 - BG2VOFS_copy2, 0);
+      }
     }
   } else if (mod == 7) {
     // indoors, except when the light cone is in use
@@ -196,6 +203,7 @@ void ZeldaDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
 
   if (g_zenv.ppu->extraLeftRight != 0 || render_flags & kPpuRenderFlags_Height240)
     ConfigurePpuSideSpace();
+  Widescreen_OverworldDrawNeighbors();  // [lttp]
 
   int height = render_flags & kPpuRenderFlags_Height240 ? 240 : 224;
 
@@ -214,6 +222,7 @@ void ZeldaDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
     SimpleHdma_DoLine(&hdma_chans[0]);
     SimpleHdma_DoLine(&hdma_chans[1]);
   }
+  Widescreen_OverworldRestore();  // [lttp]
 }
 
 void HdmaSetup(uint32 addr6, uint32 addr7, uint8 transfer_unit, uint8 reg6, uint8 reg7, uint8 indirect_bank) {

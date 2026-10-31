@@ -19,6 +19,11 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
 
 ### Added
 
+- In widescreen, the overworld goes on past the edges of the area Link is in: the space at
+  the sides shows the areas next to it, as they'll be when he walks in (with what the
+  game's events have changed in them), where upstream's widescreen showed black. Only the
+  edges of the world itself are still black. The areas next door are drawn without their
+  enemies, which appear as Link goes in, as on the SNES.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini`, and on
   (SMB's): the picture is scaled up by the largest whole number that fits and blended only
   for the rest, so in fullscreen or a resized window every dot is the same size and

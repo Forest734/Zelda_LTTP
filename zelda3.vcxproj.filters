@@ -232,6 +232,9 @@
     <ClCompile Include="src\util.c">
       <Filter>Zelda</Filter>
     </ClCompile>
+    <ClCompile Include="src\widescreen.c">
+      <Filter>Zelda</Filter>
+    </ClCompile>
     <ClCompile Include="src\platform\win32\volume_control.c">
       <Filter>Zelda</Filter>
     </ClCompile>
@@ -433,6 +436,9 @@
       <Filter>Zelda</Filter>
     </ClInclude>
     <ClInclude Include="src\util.h">
+      <Filter>Zelda</Filter>
+    </ClInclude>
+    <ClInclude Include="src\widescreen.h">
       <Filter>Zelda</Filter>
     </ClInclude>
     <ClInclude Include="src\variables.h">

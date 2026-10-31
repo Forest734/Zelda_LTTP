@@ -74,7 +74,30 @@ altogether, as upstream has it.
 and snapshots (its header says how), as SMB's does. Run it with
 `SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy`, or a window opens on the user's desktop
 with sound. `ref <n>` loads the reference saves in `saves/ref/`, chapter by chapter
-through the game, which reach most places quickly.
+through the game, which reach most places quickly. Upstream's cheats make walks easy to
+script: `<frame> gdb call PatchCommand(69)` toggles walking through walls (`'E'`) and
+`PatchCommand(119)` fills life (`'w'`); with them Link walks straight across areas, though
+through a wall he can also walk into a dungeon, or off the map, where the game shows junk.
+To check a change leaves the original picture alone, run the same script with a config at
+`ExtendedAspectRatio = 4:3` and compare its shots with the middle 256 of the wide ones
+(enemies near the edges differ: widescreen keeps them active 64 pixels further out).
+
+## Widescreen
+
+Upstream's (`ExtendedAspectRatio`, at 16:9 the picture is 398 wide, 71 extra a side) draws
+the extra space only inside the current overworld area or dungeon room
+(`ConfigurePpuSideSpace` in zelda_rtl.c), with black past it, and keeps sprites active 64
+pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
+
+- **Overworld neighbours.** The game keeps only the current area's map16 in RAM
+  (`dung_bg2`) and streams it into BG2's 64x64 tilemap (VRAM 0, the world mod 512). Each
+  neighbour's map16 is built by the game's own routines (`Overworld_DecompressAndDrawAll
+  Quadrants`, `Overworld_HandleOverlaysAndBombDoors`) on a copy of `g_ram` that's put back,
+  cached per area until its `save_ow_event_info` changes; `ZeldaDrawPpuFrame` writes their
+  tiles past the area's edges into VRAM just before the PPU draws and restores VRAM after,
+  so the game's state never sees it. A tile touching the original 256x224 is never written.
+  Note the swamp and the dam (0x7b, 0x3b) lose their event overlay when left (overworld.c,
+  `Overworld_LoadGFXAndScreenSize`), so seen from next door they're drawn without it.
 
 ## Settings (zelda3.ini)
 
