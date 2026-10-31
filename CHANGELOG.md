@@ -19,5 +19,10 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
 
 ### Added
 
+- Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini`, and on
+  (SMB's): the picture is scaled up by the largest whole number that fits and blended only
+  for the rest, so in fullscreen or a resized window every dot is the same size and
+  scrolling doesn't shimmer. At the window's own size (`WindowScale`) it's as before. SDL
+  output only; OpenGL takes it as `0`.
 - `play.sh`, which builds the program if its code changed and plays the game, showing any
   build error in a dialog.

@@ -204,6 +204,8 @@ static void SDLCALL AudioCallback(void *userdata, Uint8 *stream, int len) {
 static SDL_Renderer *g_renderer;
 static SDL_Texture *g_texture;
 static SDL_Rect g_sdl_renderer_rect;
+static SDL_Texture *g_sdl_scaled;  // [lttp] the frame at a whole multiple of its size
+static int g_sdl_scaled_w, g_sdl_scaled_h;  // [lttp]
 
 static bool SdlRenderer_Init(SDL_Window *window) {
 
@@ -242,6 +244,8 @@ static bool SdlRenderer_Init(SDL_Window *window) {
 }
 
 static void SdlRenderer_Destroy() {
+  if (g_sdl_scaled)
+    SDL_DestroyTexture(g_sdl_scaled);  // [lttp]
   SDL_DestroyTexture(g_texture);
   SDL_DestroyRenderer(g_renderer);
 }
@@ -262,8 +266,36 @@ static void SdlRenderer_EndDraw() {
 //  uint64 after = SDL_GetPerformanceCounter();
 //  float v = (double)(after - before) / SDL_GetPerformanceFrequency();
 //  printf("%f ms\n", v * 1000);
+  // [lttp] Sharp (SMB's): nearest to the largest whole multiple of the frame that fits the
+  // window, then linear from there to the window's size, so the dots stay even and sharp at
+  // any size (nearest straight to a size that isn't a multiple makes some dots a pixel wider
+  // than others). A frame larger than the window, the world map at 4x (EnhancedMode7), goes
+  // down linear; without render targets, nearest straight to the window.
+  SDL_Texture *frame = g_texture;
+  SDL_Rect *src = &g_sdl_renderer_rect;
+  if (g_config.sharp_filtering) {
+    int w = 0, h = 0;
+    SDL_GetRendererOutputSize(g_renderer, &w, &h);
+    int factor = IntMin(w / g_sdl_renderer_rect.w, h / g_sdl_renderer_rect.h);
+    SDL_SetTextureScaleMode(g_texture, factor ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
+    int sw = g_sdl_renderer_rect.w * factor, sh = g_sdl_renderer_rect.h * factor;
+    if (factor && (sw != g_sdl_scaled_w || sh != g_sdl_scaled_h)) {
+      if (g_sdl_scaled)
+        SDL_DestroyTexture(g_sdl_scaled);
+      g_sdl_scaled = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, sw, sh);
+      if (g_sdl_scaled)
+        SDL_SetTextureScaleMode(g_sdl_scaled, SDL_ScaleModeLinear);
+      g_sdl_scaled_w = sw, g_sdl_scaled_h = sh;
+    }
+    if (factor && g_sdl_scaled && SDL_SetRenderTarget(g_renderer, g_sdl_scaled) == 0) {
+      SDL_RenderCopy(g_renderer, g_texture, &g_sdl_renderer_rect, NULL);
+      SDL_SetRenderTarget(g_renderer, NULL);
+      frame = g_sdl_scaled;
+      src = NULL;
+    }
+  }
   SDL_RenderClear(g_renderer);
-  SDL_RenderCopy(g_renderer, g_texture, &g_sdl_renderer_rect, NULL);
+  SDL_RenderCopy(g_renderer, frame, src, NULL);
   SDL_RenderPresent(g_renderer); // vsyncs to 60 FPS?
 }
 

@@ -84,6 +84,14 @@ sharper world map), `NoSpriteLimits`, MSU-1 audio, `LinearFiltering`, GLSL shade
 `OutputMethod = OpenGL`, and `[Features]`: item switching on L/R and bug fixes. Start by
 seeing how far those go before writing code.
 
+`LinearFiltering = Sharp` (ours, on; SMB's) makes `SdlRenderer_EndDraw` scale sharp
+bilinear: nearest into a render target at the largest whole multiple that fits, linear from
+there (at `WindowScale`'s own size, identical to nearest); the 4x world map, when larger than
+the window, goes down linear. drive.py's shots are the PPU's, not the window's; to see the
+window, run drive.py with `SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software`, a `WindowSize`
+in a `--config` of your own, and `<frame> gdb call (int)setenv("SDL_VIDEO_DUMMY_SAVE_FRAMES",
+"1", 1)`: each frame presented after is written as a BMP in the current directory.
+
 Like SMB, zelda3 can run the original machine code beside the C code and compare RAM each
 frame (`./zelda3 zelda3.sfc`, at 4:3): the check for changes meant to leave the game as it
 was.

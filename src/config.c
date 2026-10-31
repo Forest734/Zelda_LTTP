@@ -363,7 +363,9 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
                                                                         kOutputMethod_SDL;
       return true;
     } else if (StringEqualsNoCase(key, "LinearFiltering")) {
-      return ParseBool(value, &g_config.linear_filtering);
+      // [lttp] Or Sharp: nearest to a whole multiple, linear only the rest of the way (SMB's).
+      g_config.sharp_filtering = StringEqualsNoCase(value, "Sharp");
+      return g_config.sharp_filtering || ParseBool(value, &g_config.linear_filtering);
     } else if (StringEqualsNoCase(key, "NoSpriteLimits")) {
       return ParseBool(value, &g_config.no_sprite_limits);
     } else if (StringEqualsNoCase(key, "LinkGraphics")) {
