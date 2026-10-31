@@ -98,6 +98,15 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   so the game's state never sees it. A tile touching the original 256x224 is never written.
   Note the swamp and the dam (0x7b, 0x3b) lose their event overlay when left (overworld.c,
   `Overworld_LoadGFXAndScreenSize`), so seen from next door they're drawn without it.
+- **Dungeon rooms.** A room is 512x512, all of it in the tilemap; `room_bounds_x/y` are
+  `{a0, b0, a1, b1}`, `a` the camera's bounds in a quadrant, `b` in the whole room, and
+  `quadrant_fullsize_x/y` picks which. `ConfigurePpuSideSpace` uses `b` always, so with the
+  camera kept to a quadrant the sides show the rest of the room. Past the room's edges is
+  the next room, not loaded: black. Lantern-dark rooms keep upstream's no extra space.
+
+Still black (not done): past a dungeon room's edges; the edges of the world; the top
+corners of the tilted world map; and sprites in the outermost 7 pixels a side (active only
+64 out of 71).
 
 ## Settings (zelda3.ini)
 

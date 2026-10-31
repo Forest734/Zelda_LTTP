@@ -24,6 +24,9 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   game's events have changed in them), where upstream's widescreen showed black. Only the
   edges of the world itself are still black. The areas next door are drawn without their
   enemies, which appear as Link goes in, as on the SNES.
+- In widescreen, in a dungeon room where the camera keeps to one part of the room, the
+  space at the sides shows the rest of the room, where upstream showed black. Past the
+  room's own edges it's still black (the next room isn't loaded until Link goes in).
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini`, and on
   (SMB's): the picture is scaled up by the largest whole number that fits and blended only
   for the rest, so in fullscreen or a resized window every dot is the same size and

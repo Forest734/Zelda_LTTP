@@ -166,11 +166,17 @@ static void ConfigurePpuSideSpace() {
     // indoors, except when the light cone is in use
     if (!(hdr_dungeon_dark_with_lantern && TS_copy != 0)) {
       int qm = quadrant_fullsize_x >> 1;
+      // [lttp] with the camera kept to a quadrant, the rest of the room too: it's all in the
+      // tilemap. Bounds are {a0, b0, a1, b1}: a the quadrant's, b the whole room's.
+      if (enhanced_features0 & kFeatures0_WidescreenVisualFixes)
+        qm = 1;
       extra_left = IntMax(BG2HOFS_copy2 - room_bounds_x.v[qm], 0);
       extra_right = IntMax(room_bounds_x.v[qm + 2] - BG2HOFS_copy2, 0);
     }
 
     int qy = quadrant_fullsize_y >> 1;
+    if (enhanced_features0 & kFeatures0_WidescreenVisualFixes)
+      qy = 1;  // [lttp] likewise
     extra_bottom = IntMax(room_bounds_y.v[qy + 2] - BG2VOFS_copy2, 0);
   } else if (mod == 20 || mod == 0 || mod == 1) {
     extra_left = kPpuExtraLeftRight, extra_right = kPpuExtraLeftRight;
