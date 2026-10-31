@@ -50,7 +50,26 @@ Set up 2026-10-31: cloned, ROM checked and copied in, `play.sh` written. Auto mo
 let Claude run the freshly downloaded repo's code (the build and the asset extractor), so
 the user ran the first `./play.sh`: upstream as it is built cleanly against heretic's SDL2
 with `-Werror`, ~16 s for the code and ~1 s for the assets, and `./zelda3` links SDL2
-through its RPATH.
+through its RPATH. Since then (not yet run or seen): widescreen on in zelda3.ini,
+`tools/drive.py`, and the slow-display fix below (main.c only checked to compile).
+
+## Frame pacing
+
+`main()`'s loop runs one frame per pass and presents it with vsync, so a display slower
+than 60 Hz slowed the game to its rate: the user's main display is a Dell C3422WE,
+3440x1440 at 29.99 Hz over the laptop's HDMI. SMB's fix, ported: when the window's display
+reports under 59 Hz (`DisplayIsSlow`; off screen it reports 0), a frame ending 17 ms or
+more behind the clock makes the next one run undrawn (`catch_up`), and over 100 ms behind
+is a stall whose time is dropped (upstream: 500 ms). Turbo's undrawn frames skip the timing
+altogether, as upstream has it.
+
+## Testing
+
+`tools/drive.py` runs the game under gdb, off screen, from a script of inputs, screenshots
+and snapshots (its header says how), as SMB's does. Run it with
+`SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy`, or a window opens on the user's desktop
+with sound. `ref <n>` loads the reference saves in `saves/ref/`, chapter by chapter
+through the game, which reach most places quickly.
 
 ## Settings (zelda3.ini)
 
@@ -66,8 +85,8 @@ was.
 
 ## Upstreams
 
-`origin` is `git@github-forest734:Forest734/Zelda-LTTP.git` (the GitHub repo has yet to be
-created), and the branch is `main` (upstream's is `master`). Bring in upstream's changes
+`origin` is `git@github-forest734:Forest734/Zelda_LTTP.git` (underscore, though the folder
+has a hyphen), and the branch is `main` (upstream's is `master`). Bring in upstream's changes
 with `git fetch upstream && git merge upstream/master`; keep changes to upstream code small
 and marked, which merges more easily.
 

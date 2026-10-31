@@ -276,6 +276,14 @@ static const struct RendererFuncs kSdlRendererFuncs  = {
 
 void OpenGLRenderer_Create(struct RendererFuncs *funcs, bool use_opengl_es);
 
+// [lttp] the window's display refreshes slower than 60 times a second, as a 3440x1440
+// monitor does at 30 Hz over HDMI 1.4 (SMB's fix). Off screen (tools/drive.py) it's never slow.
+static bool DisplayIsSlow(void) {
+  SDL_DisplayMode mode;
+  return SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(g_window), &mode) == 0 &&
+         mode.refresh_rate != 0 && mode.refresh_rate < 59;
+}
+
 #undef main
 int main(int argc, char** argv) {
   argc--, argv++;
@@ -395,6 +403,7 @@ int main(int argc, char** argv) {
   uint32 lastTick = SDL_GetTicks();
   uint32 curTick = 0;
   uint32 frameCtr = 0;
+  bool catch_up = false;  // [lttp] the last frame ended a frame or more behind the clock
   bool audiopaused = true;
 
   if (g_config.autosave)
@@ -463,11 +472,16 @@ int main(int argc, char** argv) {
 
     frameCtr++;
 
-    if ((g_turbo ^ (is_replay & g_replay_turbo)) && (frameCtr & (g_turbo ? 0xf : 0x7f)) != 0) {
+    bool turbo = g_turbo ^ (is_replay & g_replay_turbo);  // [lttp]
+    if (turbo && (frameCtr & (g_turbo ? 0xf : 0x7f)) != 0) {
       continue;
     }
 
-    DrawPpuFrameWithPerf();
+    // [lttp] every frame from here keeps to the clock. One behind it runs without being
+    // drawn (as turbo's are), so on a display slower than 60 Hz, whose vsync holds each
+    // frame drawn for longer than a frame, the game still runs 60 frames a second
+    if (!catch_up)
+      DrawPpuFrameWithPerf();
 
     if (g_config.display_perf_title) {
       char title[60];
@@ -478,9 +492,11 @@ int main(int argc, char** argv) {
     // if vsync isn't working, delay manually
     curTick = SDL_GetTicks();
 
+    catch_up = false;  // [lttp]
     if (!g_config.disable_frame_delay) {
       static const uint8 delays[3] = { 17, 17, 16 }; // 60 fps
       lastTick += delays[frameCtr % 3];
+      bool slow = !turbo && DisplayIsSlow();  // [lttp]
 
       if (lastTick > curTick) {
         uint32 delta = lastTick - curTick;
@@ -490,8 +506,12 @@ int main(int argc, char** argv) {
         }
 //        printf("Sleeping %d\n", delta);
         SDL_Delay(delta);
-      } else if (curTick - lastTick > 500) {
+      } else if (curTick - lastTick > (slow ? 100 : 500)) {  // [lttp] slow
+        // [lttp] on a slow display, more than six frames behind (a refresh missed is up to
+        // four) is a stall, not the display: the time is lost, not rushed through unseen
         lastTick = curTick;
+      } else if (slow && curTick - lastTick >= 17) {
+        catch_up = true;  // [lttp]
       }
     }
   }
