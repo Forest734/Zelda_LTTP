@@ -346,7 +346,7 @@ int Ancilla_AllocHigh() {
 
 static void Ancilla_SetOam(OamEnt *oam, uint16 x, uint16 y, uint8 charnum, uint8 flags, uint8 big) {
   uint8 yval = 0xf0;
-  int xt = enhanced_features0 & kFeatures0_ExtendScreen64 ? 0x40 : 0;
+  int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
   if ((uint16)(x + xt) < 256 + xt * 2 && y < 256) {
     big |= (x >> 8) & 1;
     oam->x = x;
@@ -362,7 +362,7 @@ static void Ancilla_SetOam(OamEnt *oam, uint16 x, uint16 y, uint8 charnum, uint8
 static void Ancilla_SetOam_Safe(OamEnt *oam, uint16 x, uint16 y, uint8 charnum, uint8 flags, uint8 big) {
   uint8 yval = 0xf0;
   oam->x = x;
-  int xt = enhanced_features0 & kFeatures0_ExtendScreen64 ? 0x48 : 0;
+  int xt = ExtendScreenMargin() ? IntMax(ExtendScreenMargin(), 0x48) : 0;  // [lttp] upstream: 0x48
   if ((uint16)(x + 0x80) < (0x180 + xt)) {
     big |= (x >> 8) & 1;
     if ((uint16)(y + 0x10) < 0x100)
@@ -458,7 +458,7 @@ void AddBirdCommon(int k) {
   ancilla_K[k] = 0;
   ancilla_G[k] = 0;
 
-  int xt = (enhanced_features0 & kFeatures0_ExtendScreen64) ? 0x40 : 0;
+  int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
   Ancilla_SetXY(k, BG2HOFS_copy2 - 16 - xt, link_y_coord - 8);
 }
 
@@ -4636,7 +4636,7 @@ void Ancilla27_Duck(int k) {  // 88dde8
     goto endif_1;
 
   if (ancilla_timer[k]) {
-    int xt = (enhanced_features0 & kFeatures0_ExtendScreen64) ? 0x40 : 0;
+    int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
     Ancilla_SetXY(k, BG2HOFS_copy2 - 16 - xt, link_y_coord - 8);
     return;
   }
@@ -4647,8 +4647,13 @@ void Ancilla27_Duck(int k) {  // 88dde8
   }
 
   if (ancilla_L[k] || ancilla_step[k] && (flag_unk1++, true)) {
-    ancilla_z_vel[k]--;
-    Ancilla_MoveZ(k);
+    // [lttp] flying off with Link, it now goes on past the picture's right edge, which
+    // from the far left takes long enough for its height (a byte) to wrap round to the
+    // ground: after 89 frames, well above the picture, it stops climbing
+    if (!(ExtendScreenMargin() && !ancilla_L[k] && (int8)ancilla_z_vel[k] <= -89)) {
+      ancilla_z_vel[k]--;
+      Ancilla_MoveZ(k);
+    }
   }
   Ancilla_MoveX(k);
 
@@ -4744,7 +4749,7 @@ endif_5:
   if (ancilla_step[k])
     AncillaDraw_Shadow(oam, 1, info.x - 7, info.y + 28, 0x30);
 
-  if (!sign16(info.x) && info.x >= 0x130) {
+  if (!sign16(info.x) && info.x >= 0x130 + ExtendScreenMargin()) {  // [lttp] past the picture's edge
     ancilla_type[k] = 0;
     if (!ancilla_L[k] && ancilla_step[k]) {
       submodule_index = 10;
@@ -7100,7 +7105,7 @@ int DashTremor_TwiddleOffset(int k) {  // 8ffafe
 }
 
 void Ancilla_TerminateIfOffscreen(int j) {  // 8ffd52
-  int xt = (enhanced_features0 & kFeatures0_ExtendScreen64) ? 0x40 : 0;
+  int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
   uint16 x = Ancilla_GetX(j) - BG2HOFS_copy2 + xt;
   uint16 y = Ancilla_GetY(j) - BG2VOFS_copy2;
   if (x >= 244 + xt * 2 || y >= 240)

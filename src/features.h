@@ -61,5 +61,11 @@ enum {
 
 extern uint32 g_wanted_zelda_features;
 
+// [lttp] With kFeatures0_ExtendScreen64, how far past either side of the 256 sprites stay
+// active and ancillae are drawn: upstream's 64, or the picture's extra width rounded up to 8
+// where that's more (16:9 shows 71 a side, so 72). Set by main() from ExtendedAspectRatio.
+extern int g_extend_screen_margin;
+#define ExtendScreenMargin() ((enhanced_features0 & kFeatures0_ExtendScreen64) ? g_extend_screen_margin : 0)
+
 
 #endif  // ZELDA3_FEATURES_H_

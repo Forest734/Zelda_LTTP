@@ -16,6 +16,10 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   would run as slowly as the display, half speed at 30 Hz, as each frame waited for the
   display. It now runs 60 frames a second there, drawing those the display can show (SMB's
   fix). At 60 Hz it's as before.
+- In widescreen, arrows, the boomerang and the like vanished 7 pixels before the edges of the
+  picture, and the flute's bird, carrying Link off, vanished with its shadow 23 pixels before
+  the right edge: upstream's widescreen kept them 64 pixels out, where 16:9 shows 71. They
+  now go on out of the picture, and enemies come and go a little further out of sight.
 
 ### Added
 

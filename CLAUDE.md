@@ -66,6 +66,9 @@ walls of nine dungeons (the reference saves of chapters 2 to 12 but 5 and 7, whi
 outdoors), room-to-room scrolls (at 240 lines too), a
 spiral staircase in the Eastern Palace, a dozen house and cave entrances, the middle 256
 identical to 4:3, and every room of the 0x140 built by `Dungeon_LoadRoom` without an assert.
+The sprite margins (below) were checked off screen against the build before them: arrows
+both ways, and the flute's bird taking off (from x 4 on screen too) and landing, go past the
+edges at 16:9, and 305 shots of the same at 4:3 are identical.
 
 ## Frame pacing
 
@@ -136,15 +139,23 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
 
 Still black (not done): rooms that don't look alike, or (all but houses and caves)
 unreachable rooms with other graphics; the edges of the world; the top corners of the tilted
-world map. Sprites: upstream's 64-pixel margin is short of 71: overworld sprites are loaded
-16 pixels wide at 64 to 80 pixels out to the left (`Sprite_ActivateWhenProximal`), so can
-appear up to 7 pixels inside the edge, and ancillae (arrows, the boomerang) are drawn only
-within 64 (`Ancilla_SetOam`) and end 52 out on the right (`Ancilla_TerminateIfOffscreen`).
+world map.
+
+Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
+pixels past either side of the 256, 7 short of 16:9's 71, so arrows and the like vanished
+7 pixels inside the edges (`Ancilla_SetOam`, `Ancilla_TerminateIfOffscreen`), and the
+flute's bird and its shadow 23 inside the right one (`Ancilla27_Duck`). Ours is
+`ExtendScreenMargin()` (features.h): the extra width rounded up to 8, at least 64 (72 at
+16:9, 88 at 16:9 with 240 lines, 96 at 18:9), and at least 0x48 where upstream had that.
+Carrying Link off, the bird now flies 72 further, which from the far left takes long enough
+for its height (a byte, rising faster each frame) to wrap round to the ground: in
+widescreen it stops climbing after 89 frames, well above the picture. Followers are drawn
+only within the 256 (`SetOam_Follower`), which trailing Link they don't leave.
 
 ## Settings (zelda3.ini)
 
 Upstream already has much of what SMB had to add: `ExtendedAspectRatio` (4:3, 16:10, 16:9
-or 18:9, with `extend_y` for 240 lines; at 4:3 now), `NewRenderer`, `EnhancedMode7` (a
+or 18:9, with `extend_y` for 240 lines; at 16:9 here), `NewRenderer`, `EnhancedMode7` (a
 sharper world map), `NoSpriteLimits`, MSU-1 audio, `LinearFiltering`, GLSL shaders with
 `OutputMethod = OpenGL`, and `[Features]`: item switching on L/R and bug fixes. Start by
 seeing how far those go before writing code.

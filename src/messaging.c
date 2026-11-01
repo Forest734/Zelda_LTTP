@@ -1486,7 +1486,7 @@ static bool WorldMap_CalculateOamCoordinates(Point16U *pt) {  // 8ac39f
     uint16 t10 = ((t8 >> 8) * 45) + t9;
     uint16 t11 = below2 ? 0x80 - t10 : t10 + 0x80;
     uint16 xval = t11 - BG1HOFS_copy2;
-    int xt = enhanced_features0 & kFeatures0_ExtendScreen64 ? 0x48 : 0;
+    int xt = ExtendScreenMargin() ? IntMax(ExtendScreenMargin(), 0x48) : 0;  // [lttp] upstream: 0x48
     if ((uint16)(xval + 0x80 + xt) >= (0x100 + xt * 2))
       return false;
     pt->x = xval + 0x81;

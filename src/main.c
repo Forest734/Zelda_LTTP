@@ -389,6 +389,7 @@ int main(int argc, char** argv) {
 
   ZeldaInitialize();
   g_zenv.ppu->extraLeftRight = UintMin(g_config.extended_aspect_ratio, kPpuExtraLeftRight);
+  g_extend_screen_margin = IntMax(64, (g_zenv.ppu->extraLeftRight + 7) & ~7);  // [lttp]
   g_snes_width = (g_config.extended_aspect_ratio * 2 + 256);
   g_snes_height = (g_config.extend_y ? 240 : 224);
 

@@ -16,6 +16,7 @@ ZeldaEnv g_zenv;
 uint8 g_ram[131072];
 
 uint32 g_wanted_zelda_features;
+int g_extend_screen_margin = 64;  // [lttp]
 
 static void Startup_InitializeMemory();
 
