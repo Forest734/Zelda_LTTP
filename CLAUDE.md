@@ -149,10 +149,24 @@ sharper world map), `NoSpriteLimits`, MSU-1 audio, `LinearFiltering`, GLSL shade
 `OutputMethod = OpenGL`, and `[Features]`: item switching on L/R and bug fixes. Start by
 seeing how far those go before writing code.
 
-`LinearFiltering = Sharp` (ours, on; SMB's) makes `SdlRenderer_EndDraw` scale sharp
+`LinearFiltering = Sharp` (ours; SMB's) makes `SdlRenderer_EndDraw` scale sharp
 bilinear: nearest into a render target at the largest whole multiple that fits, linear from
 there (at `WindowScale`'s own size, identical to nearest); the 4x world map, when larger than
-the window, goes down linear. drive.py's shots are the PPU's, not the window's; to see the
+the window, goes down linear.
+
+`LinearFiltering = Smooth` (ours, on; the user asked for smoother pixels on 2026-11-01)
+scales the frame with xBR level 2, Hyllian's pixel-art scaler, written for the CPU in
+`src/smooth.c` (SDL's renderer runs no shaders): each corner of each dot is cut at 45, 30 or
+60 degrees where the diagonals round it show an edge, filled with the colour across it,
+anti-aliased by coverage tables made once per scale. The PPU draws into a buffer of ours
+(`SdlRenderer_BeginDraw`; a locked texture is write-only), `SdlRenderer_EndDrawSmooth`
+scales it at the largest whole multiple that fits, 2 to `kSmoothMaxScale` (4), into a
+streaming texture, and SDL scales that linear to the window; frames of another size (the 4x
+world map) go the old way, linear. Rows are shared out to up to 4 SDL threads, 8 at a time
+from an atomic counter. On this laptop's i5-1035G1 it takes 1.5 to 2.5 ms a frame at 3x or
+4x (a single thread, 3 to 5); at 6x it was 3.7, mostly writing the 13 MB, hence the cap. It
+was checked under ASan/UBSan and TSan with a harness linking `smooth.c` alone, and in the
+window as below. drive.py's shots are the PPU's, not the window's; to see the
 window, run drive.py with `SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software`, a `WindowSize`
 in a `--config` of your own, and `<frame> gdb call (int)setenv("SDL_VIDEO_DUMMY_SAVE_FRAMES",
 "1", 1)`: each frame presented after is written as a BMP in the current directory.

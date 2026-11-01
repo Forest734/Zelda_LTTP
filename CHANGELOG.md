@@ -33,11 +33,17 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   until the screen fades. Where the room next door has other graphics or colours, or is
   dark, it's still black, as it is in houses and caves except through a door. As on the
   overworld, the rooms next door are drawn without their enemies.
-- Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini`, and on
-  (SMB's): the picture is scaled up by the largest whole number that fits and blended only
-  for the rest, so in fullscreen or a resized window every dot is the same size and
-  scrolling doesn't shimmer. At the window's own size (`WindowScale`) it's as before. SDL
-  output only; OpenGL takes it as `0`.
+- Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini` (SMB's):
+  the picture is scaled up by the largest whole number that fits and blended only for the
+  rest, so in fullscreen or a resized window every dot is the same size and scrolling
+  doesn't shimmer. At the window's own size (`WindowScale`) it's as before. SDL output
+  only; OpenGL takes it as `0`.
+- Smooth pixels, `LinearFiltering = Smooth` in `zelda3.ini`, and on: the stair steps of the
+  pixel art are rounded off into slopes and curves, anti-aliased, by xBR (the pixel-art
+  scaler emulators offer as a smoothing filter), at the largest whole multiple of the
+  picture that fits the window up to 4x, and blended from there to the window's size. Not
+  the world map with `EnhancedMode7`, already drawn at 4x. `Sharp` turns it back off. SDL
+  output only; OpenGL takes it as `1`, where a `Shader` can do the same.
 - `play.sh`, which builds the program if its code changed and plays the game, showing any
   build error in a dialog, and a Triforce icon for it (`resources/zelda-lttp.png`, from
   upstream's Windows icon), for a launcher in the app menu.

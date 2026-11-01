@@ -364,8 +364,12 @@ static bool HandleIniConfig(int section, const char *key, char *value) {
       return true;
     } else if (StringEqualsNoCase(key, "LinearFiltering")) {
       // [lttp] Or Sharp: nearest to a whole multiple, linear only the rest of the way (SMB's).
+      // Or Smooth: xBR to a whole multiple, then linear, which is what OpenGL takes it as.
       g_config.sharp_filtering = StringEqualsNoCase(value, "Sharp");
-      return g_config.sharp_filtering || ParseBool(value, &g_config.linear_filtering);
+      g_config.smooth_filtering = StringEqualsNoCase(value, "Smooth");
+      if (g_config.smooth_filtering)
+        g_config.linear_filtering = true;
+      return g_config.sharp_filtering || g_config.smooth_filtering || ParseBool(value, &g_config.linear_filtering);
     } else if (StringEqualsNoCase(key, "NoSpriteLimits")) {
       return ParseBool(value, &g_config.no_sprite_limits);
     } else if (StringEqualsNoCase(key, "LinkGraphics")) {

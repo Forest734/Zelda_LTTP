@@ -26,6 +26,7 @@
 #include "load_gfx.h"
 #include "util.h"
 #include "audio.h"
+#include "smooth.h"  // [lttp]
 
 static bool g_run_without_emu = 0;
 
@@ -206,6 +207,10 @@ static SDL_Texture *g_texture;
 static SDL_Rect g_sdl_renderer_rect;
 static SDL_Texture *g_sdl_scaled;  // [lttp] the frame at a whole multiple of its size
 static int g_sdl_scaled_w, g_sdl_scaled_h;  // [lttp]
+static uint32 *g_smooth_frame;  // [lttp] Smooth: the frame as the PPU draws it
+static SDL_Texture *g_smooth_texture;  // [lttp] and scaled up with xBR
+static int g_smooth_scale;  // [lttp]
+static bool g_smooth_this_frame;  // [lttp]
 
 static bool SdlRenderer_Init(SDL_Window *window) {
 
@@ -246,6 +251,10 @@ static bool SdlRenderer_Init(SDL_Window *window) {
 static void SdlRenderer_Destroy() {
   if (g_sdl_scaled)
     SDL_DestroyTexture(g_sdl_scaled);  // [lttp]
+  if (g_smooth_texture)
+    SDL_DestroyTexture(g_smooth_texture);  // [lttp]
+  free(g_smooth_frame);  // [lttp]
+  g_smooth_frame = NULL, g_smooth_texture = NULL, g_smooth_scale = 0;  // [lttp]
   SDL_DestroyTexture(g_texture);
   SDL_DestroyRenderer(g_renderer);
 }
@@ -253,13 +262,61 @@ static void SdlRenderer_Destroy() {
 static void SdlRenderer_BeginDraw(int width, int height, uint8 **pixels, int *pitch) {
   g_sdl_renderer_rect.w = width;
   g_sdl_renderer_rect.h = height;
+  // [lttp] Smooth: the PPU draws into memory of ours, which xBR reads (a locked texture may
+  // not be readable). Not the world map at 4x (EnhancedMode7), which goes as it is.
+  g_smooth_this_frame = g_config.smooth_filtering && width == g_snes_width && height == g_snes_height;
+  if (g_smooth_this_frame && !g_smooth_frame)
+    g_smooth_frame = malloc(width * height * sizeof(uint32));
+  if (g_smooth_this_frame && g_smooth_frame) {
+    *pixels = (uint8 *)g_smooth_frame;
+    *pitch = width * sizeof(uint32);
+    return;
+  }
+  g_smooth_this_frame = false;
   if (SDL_LockTexture(g_texture, &g_sdl_renderer_rect, (void **)pixels, pitch) != 0) {
     printf("Failed to lock texture: %s\n", SDL_GetError());
     return;
   }
 }
 
+// [lttp] Smooth: the frame scaled up with xBR by the largest whole number that fits the window,
+// from 2 to kSmoothMaxScale, then linear from there to the window's size.
+static void SdlRenderer_EndDrawSmooth() {
+  int w = 0, h = 0;
+  SDL_GetRendererOutputSize(g_renderer, &w, &h);
+  int fw = g_sdl_renderer_rect.w, fh = g_sdl_renderer_rect.h;
+  int scale = IntMin(IntMax(IntMin(w / fw, h / fh), 2), kSmoothMaxScale);
+  if (scale != g_smooth_scale) {
+    if (g_smooth_texture)
+      SDL_DestroyTexture(g_smooth_texture);
+    g_smooth_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                                         fw * scale, fh * scale);
+    if (g_smooth_texture) {
+      SDL_SetTextureScaleMode(g_smooth_texture, SDL_ScaleModeLinear);
+      SDL_SetTextureBlendMode(g_smooth_texture, SDL_BLENDMODE_NONE);
+    }
+    g_smooth_scale = scale;
+  }
+  uint8 *pixels;
+  int pitch;
+  SDL_Texture *frame = g_smooth_texture;
+  if (frame && SDL_LockTexture(frame, NULL, (void **)&pixels, &pitch) == 0) {
+    Smooth_Scale(g_smooth_frame, fw, fw, fh, (uint32 *)pixels, pitch / sizeof(uint32), scale);
+    SDL_UnlockTexture(frame);
+  } else {  // as it is, then
+    frame = g_texture;
+    SDL_UpdateTexture(frame, &g_sdl_renderer_rect, g_smooth_frame, fw * sizeof(uint32));
+  }
+  SDL_RenderClear(g_renderer);
+  SDL_RenderCopy(g_renderer, frame, frame == g_texture ? &g_sdl_renderer_rect : NULL, NULL);
+  SDL_RenderPresent(g_renderer);
+}
+
 static void SdlRenderer_EndDraw() {
+  if (g_smooth_this_frame) {  // [lttp]
+    SdlRenderer_EndDrawSmooth();
+    return;
+  }
 
 //  uint64 before = SDL_GetPerformanceCounter();
   SDL_UnlockTexture(g_texture);
