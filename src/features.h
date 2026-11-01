@@ -66,6 +66,11 @@ extern uint32 g_wanted_zelda_features;
 // where that's more (16:9 shows 71 a side, so 72). Set by main() from ExtendedAspectRatio.
 extern int g_extend_screen_margin;
 #define ExtendScreenMargin() ((enhanced_features0 & kFeatures0_ExtendScreen64) ? g_extend_screen_margin : 0)
+// [lttp] And with it, how far the widescreen picture is moved off the world's edge
+// (Widescreen_ViewShift): what's kept active, and drawn, goes that much further on to the
+// other side, and that much less to this one, where there's nothing.
+int Widescreen_ViewShift(void);
+#define ExtendScreenShift() ((enhanced_features0 & kFeatures0_ExtendScreen64) ? Widescreen_ViewShift() : 0)
 
 
 #endif  // ZELDA3_FEATURES_H_

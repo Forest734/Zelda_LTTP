@@ -347,7 +347,7 @@ int Ancilla_AllocHigh() {
 static void Ancilla_SetOam(OamEnt *oam, uint16 x, uint16 y, uint8 charnum, uint8 flags, uint8 big) {
   uint8 yval = 0xf0;
   int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-  if ((uint16)(x + xt) < 256 + xt * 2 && y < 256) {
+  if ((uint16)(x - ExtendScreenShift() + xt) < 256 + xt * 2 && y < 256) {  // [lttp] and the picture moved
     big |= (x >> 8) & 1;
     oam->x = x;
     if (y < 0xf0)
@@ -363,7 +363,7 @@ static void Ancilla_SetOam_Safe(OamEnt *oam, uint16 x, uint16 y, uint8 charnum, 
   uint8 yval = 0xf0;
   oam->x = x;
   int xt = ExtendScreenMargin() ? IntMax(ExtendScreenMargin(), 0x48) : 0;  // [lttp] upstream: 0x48
-  if ((uint16)(x + 0x80) < (0x180 + xt)) {
+  if ((uint16)(x - ExtendScreenShift() + 0x80) < (0x180 + xt)) {  // [lttp] and the picture moved
     big |= (x >> 8) & 1;
     if ((uint16)(y + 0x10) < 0x100)
       yval = y;
@@ -459,7 +459,7 @@ void AddBirdCommon(int k) {
   ancilla_G[k] = 0;
 
   int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-  Ancilla_SetXY(k, BG2HOFS_copy2 - 16 - xt, link_y_coord - 8);
+  Ancilla_SetXY(k, BG2HOFS_copy2 + ExtendScreenShift() - 16 - xt, link_y_coord - 8);  // [lttp] and the picture moved
 }
 
 ProjectSpeedRet Bomb_ProjectSpeedTowardsPlayer(int k, uint16 x, uint16 y, uint8 vel) {  // 84eb63
@@ -4637,7 +4637,7 @@ void Ancilla27_Duck(int k) {  // 88dde8
 
   if (ancilla_timer[k]) {
     int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-    Ancilla_SetXY(k, BG2HOFS_copy2 - 16 - xt, link_y_coord - 8);
+    Ancilla_SetXY(k, BG2HOFS_copy2 + ExtendScreenShift() - 16 - xt, link_y_coord - 8);  // [lttp] and the picture moved
     return;
   }
 
@@ -4749,7 +4749,8 @@ endif_5:
   if (ancilla_step[k])
     AncillaDraw_Shadow(oam, 1, info.x - 7, info.y + 28, 0x30);
 
-  if (!sign16(info.x) && info.x >= 0x130 + ExtendScreenMargin()) {  // [lttp] past the picture's edge
+  uint16 vx = info.x - ExtendScreenShift();  // [lttp] where the picture's moved to
+  if (!sign16(vx) && vx >= 0x130 + ExtendScreenMargin()) {  // [lttp] past the picture's edge
     ancilla_type[k] = 0;
     if (!ancilla_L[k] && ancilla_step[k]) {
       submodule_index = 10;
@@ -7106,7 +7107,7 @@ int DashTremor_TwiddleOffset(int k) {  // 8ffafe
 
 void Ancilla_TerminateIfOffscreen(int j) {  // 8ffd52
   int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-  uint16 x = Ancilla_GetX(j) - BG2HOFS_copy2 + xt;
+  uint16 x = Ancilla_GetX(j) - BG2HOFS_copy2 - ExtendScreenShift() + xt;  // [lttp] and the picture moved
   uint16 y = Ancilla_GetY(j) - BG2VOFS_copy2;
   if (x >= 244 + xt * 2 || y >= 240)
     ancilla_type[j] = 0;

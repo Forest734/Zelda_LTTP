@@ -69,7 +69,11 @@ identical to 4:3, and every room of the 0x140 built by `Dungeon_LoadRoom` withou
 The sprite margins (below) were checked off screen against the build before them: arrows
 both ways, and the flute's bird taking off (from x 4 on screen too) and landing, go past the
 edges at 16:9, and 305 shots of the same at 4:3 are identical. The gamepad fix wasn't tried
-with a pad.
+with a pad. The world's edges (below) were checked off screen against the build before:
+every reference save walked left and right, shots identical but where the picture moves,
+and there the old picture moved over but for the HUD; the spotlight into Skull Woods and out
+of the Eastern Palace, a walk down the world's left edge through a mosaic fade, the flute
+there (bird, map, landing), the menus; 4:3 identical.
 
 ## Frame pacing
 
@@ -100,6 +104,13 @@ A `#` in a script line starts a comment, so a `gdb printf` can't use `%#x`.
 To check a change leaves the original picture alone, run the same script with a config at
 `ExtendedAspectRatio = 4:3` and compare its shots with the middle 256 of the wide ones
 (enemies near the edges differ: widescreen keeps them active 64 pixels further out).
+The world's edges: `ref 7` starts by Skull Woods 49 from the left edge (hold `L` and the
+picture's moved the full 71), `ref 1` and `ref 5` by the Eastern Palace and its dark world
+twin, 29 from the right. To compare with the build before, `git worktree add` it in the
+scratchpad, link in `zelda3_assets.dat`, build, and run the same script there. Runs side by
+side can disagree (seen 2026-11-01, three at once: Link posed differently 60 frames after a
+`ref`, where the same shots taken alone agreed; off screen no frame goes undrawn, so not the
+pacing), so rerun a difference alone before believing it.
 
 ## Widescreen
 
@@ -137,10 +148,31 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   Not drawn: lantern-dark rooms (upstream's no extra space), BG1 scrolled off BG2 (moving
   floors), the dungeon map. Teleport edges (`dung_hdr_travel_destinations[4]`) lead
   elsewhere than the grid shows.
+- **The world's edges.** Where the world ends (or a special area, 0x80 on, by itself) less
+  than 71 past the original's picture, the picture moves off the edge instead, the camera
+  stopping there as in a game made wide (`Widescreen_ViewShift`). `Ppu.viewShift` is how far
+  the view is moved right of where the camera puts it (+ at the left edge, − at the right):
+  the PPU scrolls BG1 and BG2 that much further (`ppu_runLine`, per line, as HDMA can write
+  them), moves sprites and windows that much left (`ppu_evaluateSprites`,
+  `PpuWindows_Calc`), and leaves BG3 (HUD, text, menus) where it was. The game's sprite
+  checks follow it (`ExtendScreenShift()` beside each `ExtendScreenMargin()`), which is
+  needed and not just nicer: OAM's 9-bit x can't tell a sprite 120 left of the 256 from one
+  392 right of it. In module 9, 14 over it, and 15/16 (the spotlight) outdoors; not in mode
+  7 (both maps put the camera at 0); new renderer only; 0 with the camera off the world
+  (through walls). A large area keeps about `(hs & ~15) - 128` to `+ 512` in the tilemap, so
+  up to 20 columns past what upstream draws come from `dung_bg2` (`WorldMap16` while
+  scrolling). Other modules over the overworld (death, falling) drop it, and the picture
+  jumps back as upstream blacks the sides. Things the game clips at the 256 with 8-bit screen
+  x (garnishes, `Ancilla_ReturnIfOutsideBounds`; ancillae hit tiles only within it) do so
+  nearer the middle when it's moved.
+
+Also: `MosaicRun` (ppu.c) gives mosaic blocks left of the 256, where upstream read before
+`mosaicModulo` and streaked the extra space in mosaic fades; the flute's map (interface
+submodule 10) gets the world map's extents, where upstream drew it as outdoors.
 
 Still black (not done): rooms that don't look alike, or (all but houses and caves)
-unreachable rooms with other graphics; the edges of the world; the top corners of the tilted
-world map.
+unreachable rooms with other graphics (the edges' picture moving could do for those); the
+top corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge.
 
 Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
 pixels past either side of the 256, 7 short of 16:9's 71, so arrows and the like vanished

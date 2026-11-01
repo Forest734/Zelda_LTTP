@@ -53,6 +53,10 @@ struct Ppu {
   uint32_t renderPitch;
   uint8_t *renderBuffer;
   uint8_t extraLeftCur, extraRightCur, extraLeftRight, extraBottomCur;
+  // [lttp] How far left the game's picture is drawn (right if negative), with what's past its
+  // right edge shown in its place: BG1, BG2, the sprites and the windows, not BG3 (the HUD).
+  // Widescreen, at the edges of the world. Only the new renderer.
+  int16_t viewShift;
   float mode7PerspectiveLow, mode7PerspectiveHigh;
 
   // TMW / TSW etc

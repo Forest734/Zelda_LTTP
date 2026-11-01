@@ -1842,8 +1842,9 @@ bool Sprite_PrepOamCoordOrDoubleRet(int k, PrepOamCoordsRet *ret) {  // 86e41e
   ret->flags = sprite_oam_flags[k] ^ sprite_obj_prio[k];
   ret->r4 = 0;
   int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
+  int sh = ExtendScreenShift();  // [lttp] where the picture's moved to
 
-  if ((uint16)(x + 0x40 + xt) >= (0x170 + xt * 2) ||
+  if ((uint16)(x - sh + 0x40 + xt) >= (0x170 + xt * 2) ||
       (uint16)(y + 0x40) >= 0x170 && !(sprite_flags4[k] & 0x20)) {
     sprite_pause[k]++;
     if (!(sprite_defl_bits[k] & 0x80))
@@ -3737,15 +3738,17 @@ void Overworld_LoadSprites() {  // 89c4ac
   }
 }
 
+static void ActivateWhenProximal(int sh);
+
 void Sprite_ActivateAllProxima() {  // 89c55e
   uint16 bak0 = BG2HOFS_copy2;
   uint8 bak1 = byte_7E069E[1];
   byte_7E069E[1] = 0xff;
 
   int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-  BG2HOFS_copy2 -= xt;
+  BG2HOFS_copy2 += ExtendScreenShift() - xt;  // [lttp] and where the picture's moved to
   for (int i = 21 + (xt >> 3); i >= 0; i--) {
-    Sprite_ActivateWhenProximal();
+    ActivateWhenProximal(0);  // [lttp] moved already
     BG2HOFS_copy2 += 16;
   }
   byte_7E069E[1] = bak1;
@@ -3766,9 +3769,13 @@ void Sprite_ProximityActivation() {  // 89c58f
 }
 
 void Sprite_ActivateWhenProximal() {  // 89c5bb
+  ActivateWhenProximal(ExtendScreenShift());  // [lttp] where the picture's moved to
+}
+
+static void ActivateWhenProximal(int sh) {  // [lttp] the camera moved by sh
   if (byte_7E069E[1]) {
     int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-    uint16 x = BG2HOFS_copy2 + (sign8(byte_7E069E[1]) ? -0x10 - xt : 0x110 + xt);
+    uint16 x = BG2HOFS_copy2 + sh + (sign8(byte_7E069E[1]) ? -0x10 - xt : 0x110 + xt);
     uint16 y = BG2VOFS_copy2 - 0x30;
     for (int i = 21; i >= 0; i--, y += 16)
       Sprite_Overworld_ProximityMotivatedLoad(x, y);
@@ -3778,7 +3785,7 @@ void Sprite_ActivateWhenProximal() {  // 89c5bb
 void Sprite_ActivateWhenProximalBig() {  // 89c5fa
   if (byte_7E069E[0]) {
     int xt = ExtendScreenMargin();  // [lttp] upstream: 0x40
-    uint16 x = BG2HOFS_copy2 - 0x30 - xt;
+    uint16 x = BG2HOFS_copy2 + ExtendScreenShift() - 0x30 - xt;  // [lttp] and the picture moved
     uint16 y = BG2VOFS_copy2 + (sign8(byte_7E069E[0]) ? -0x10 : 0x110);
     for (int i = 21 + (xt >> 3); i >= 0; i--, x += 16)
       Sprite_Overworld_ProximityMotivatedLoad(x, y);

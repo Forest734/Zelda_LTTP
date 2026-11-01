@@ -146,20 +146,29 @@ static void ConfigurePpuSideSpace() {
   int mod = main_module_index;
   if (mod == 14)
     mod = saved_module_for_menu;
+  // [lttp] the spotlight closing or opening outdoors: drawn as there, the picture kept where
+  // it is (its iris goes black past the original's picture anyway)
+  if ((mod == 15 || mod == 16) && !player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
+    mod = 9;
   if (mod == 9) {
-    if (main_module_index == 14 && submodule_index == 7 && overworld_map_state >= 4) {
+    if (main_module_index == 14 && (submodule_index == 7 && overworld_map_state >= 4 ||
+        // [lttp] and the flute's (upstream drew it as outdoors, black at the left)
+        submodule_index == 10 && g_zenv.ppu->mode == 7 && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))) {
       // World map
       extra_left = kPpuExtraLeftRight, extra_right = kPpuExtraLeftRight;
       extra_bottom = 16;
     } else {
       // outdoors
-      extra_left = BG2HOFS_copy2 - ow_scroll_vars0.xstart;
-      extra_right = ow_scroll_vars0.xend - BG2HOFS_copy2;
+      // [lttp] where the picture is: moved off the world's edges (upstream: BG2HOFS_copy2)
+      int shift = Widescreen_ViewShift(), hs = BG2HOFS_copy2 + shift;
+      g_zenv.ppu->viewShift = shift;
+      extra_left = hs - ow_scroll_vars0.xstart;
+      extra_right = ow_scroll_vars0.xend - hs;
       extra_bottom = ow_scroll_vars0.yend - BG2VOFS_copy2;
       if (Widescreen_OverworldShowsNeighbors()) {
         // [lttp] past the area's edges its neighbours, on to the world's edges
-        extra_left = BG2HOFS_copy2;
-        extra_right = IntMax(0x1000 - 256 - BG2HOFS_copy2, 0);
+        extra_left = hs;
+        extra_right = IntMax(0x1000 - 256 - hs, 0);
         extra_bottom = IntMax(0x1000 - 224 - BG2VOFS_copy2, 0);
       }
     }
@@ -210,6 +219,7 @@ void ZeldaDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
       PpuSetMode7PerspectiveCorrection(g_zenv.ppu, 0, 0);
   }
 
+  g_zenv.ppu->viewShift = 0;  // [lttp] unless ConfigurePpuSideSpace moves the picture
   if (g_zenv.ppu->extraLeftRight != 0 || render_flags & kPpuRenderFlags_Height240)
     ConfigurePpuSideSpace();
   Widescreen_DrawNeighbors();  // [lttp]

@@ -36,6 +36,7 @@ enum {
 Ppu* ppu_init() {
   Ppu* ppu = (Ppu * )malloc(sizeof(Ppu));
   ppu->extraLeftRight = kPpuExtraLeftRight;
+  ppu->renderFlags = 0, ppu->viewShift = 0;  // [lttp]
   return ppu;
 }
 
@@ -50,6 +51,7 @@ void ppu_reset(Ppu* ppu) {
   ppu->extraLeftCur = 0;
   ppu->extraRightCur = 0;
   ppu->extraBottomCur = 0;
+  ppu->viewShift = 0;  // [lttp]
   ppu->vramPointer = 0;
   ppu->vramIncrementOnHigh = false;
   ppu->vramIncrement = 1;
@@ -179,7 +181,13 @@ void ppu_runLine(Ppu *ppu, int line) {
     }
 
     if (ppu->renderFlags & kPpuRenderFlags_NewRenderer) {
+      // [lttp] the picture moved: BG1 and BG2 scrolled with it, for this line (HDMA can
+      // write their registers between lines)
+      uint16 h0 = ppu->bgLayer[0].hScroll, h1 = ppu->bgLayer[1].hScroll;
+      ppu->bgLayer[0].hScroll = (h0 + ppu->viewShift) & 0x3ff;
+      ppu->bgLayer[1].hScroll = (h1 + ppu->viewShift) & 0x3ff;
       PpuDrawWholeLine(ppu, line);
+      ppu->bgLayer[0].hScroll = h0, ppu->bgLayer[1].hScroll = h1;
     } else {
       if (ppu->mode == 7)
         ppu_calculateMode7Starts(ppu, line);
@@ -219,20 +227,26 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   win->edges[1] = window_right;
   uint i, j;
   int t;
-  bool w1_ena = (winflags & kWindow1Enabled) && ppu->window1left <= ppu->window1right;
+  // [lttp] the windows move with the picture, but BG3's (the HUD), and are cut to what's drawn
+  int shift = layer != 2 ? ppu->viewShift : 0;
+  int w1l = IntMin(IntMax(ppu->window1left - shift, win->edges[0]), window_right);
+  int w1r = IntMin(IntMax(ppu->window1right + 1 - shift, win->edges[0]), window_right);
+  int w2l = IntMin(IntMax(ppu->window2left - shift, win->edges[0]), window_right);
+  int w2r = IntMin(IntMax(ppu->window2right + 1 - shift, win->edges[0]), window_right);
+  bool w1_ena = (winflags & kWindow1Enabled) && w1l < w1r;  // [lttp] upstream: left <= right
   if (w1_ena) {
-    if (ppu->window1left > win->edges[0]) {
-      win->edges[nr] = ppu->window1left;
+    if (w1l > win->edges[0]) {
+      win->edges[nr] = w1l;
       win->edges[++nr] = window_right;
     }
-    if (ppu->window1right + 1 < window_right) {
-      win->edges[nr] = ppu->window1right + 1;
+    if (w1r < window_right) {
+      win->edges[nr] = w1r;
       win->edges[++nr] = window_right;
     }
   }
-  bool w2_ena = (winflags & kWindow2Enabled) && ppu->window2left <= ppu->window2right;
+  bool w2_ena = (winflags & kWindow2Enabled) && w2l < w2r;  // [lttp] likewise
   if (w2_ena) {
-    for (i = 0; i <= nr && (t = ppu->window2left) != win->edges[i]; i++) {
+    for (i = 0; i <= nr && (t = w2l) != win->edges[i]; i++) {
       if (t < win->edges[i]) {
         for (j = nr++; j >= i; j--)
           win->edges[j + 1] = win->edges[j];
@@ -240,7 +254,7 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
         break;
       }
     }
-    for (; i <= nr && (t = ppu->window2right + 1) != win->edges[i]; i++) {
+    for (; i <= nr && (t = w2r) != win->edges[i]; i++) {
       if (t < win->edges[i]) {
         for (j = nr++; j >= i; j--)
           win->edges[j + 1] = win->edges[j];
@@ -253,20 +267,28 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   // get a bitmap of how regions map to windows
   uint8 w1_bits = 0, w2_bits = 0;
   if (w1_ena) {
-    for (i = 0; win->edges[i] != ppu->window1left; i++);
-    for (j = i; win->edges[j] != ppu->window1right + 1; j++);
+    for (i = 0; win->edges[i] != w1l; i++);
+    for (j = i; win->edges[j] != w1r; j++);
     w1_bits = ((1 << (j - i)) - 1) << i;
   }
   if ((winflags & (kWindow1Enabled | kWindow1Inversed)) == (kWindow1Enabled | kWindow1Inversed))
     w1_bits = ~w1_bits;
   if (w2_ena) {
-    for (i = 0; win->edges[i] != ppu->window2left; i++);
-    for (j = i; win->edges[j] != ppu->window2right + 1; j++);
+    for (i = 0; win->edges[i] != w2l; i++);
+    for (j = i; win->edges[j] != w2r; j++);
     w2_bits = ((1 << (j - i)) - 1) << i;
   }
   if ((winflags & (kWindow2Enabled | kWindow2Inversed)) == (kWindow2Enabled | kWindow2Inversed))
     w2_bits = ~w2_bits;
   win->bits = w1_bits | w2_bits;
+}
+
+// [lttp] The pixels from x to the end of its mosaic block. The blocks go on past the left of
+// the original's picture, where x is negative (upstream read before mosaicModulo there, and
+// drew a run of garbage length), and move with the picture (Ppu.viewShift).
+static int MosaicRun(Ppu *ppu, int x, uint layer) {
+  int size = ppu->mosaicSize, m = (x + (layer != 2 ? ppu->viewShift : 0)) % size;
+  return size - (m < 0 ? m + size : m);
 }
 
 // Draw a whole line of a 4bpp background layer into bgBuffers
@@ -500,7 +522,7 @@ static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer
     const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
     const uint16 *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
     x &= 7;
-    int w = ppu->mosaicSize - (sx - ppu->mosaicModulo[sx]);
+    int w = MosaicRun(ppu, sx, layer);  // [lttp] upstream: mosaicSize - (sx - mosaicModulo[sx])
     do {
       w = IntMin(w, dstz_end - dstz);
       uint32 tile = *tp;
@@ -559,7 +581,7 @@ static void PpuDrawBackground_2bpp_mosaic(Ppu *ppu, int y, bool sub, uint layer,
     const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
     const uint16 *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
     x &= 7;
-    int w = ppu->mosaicSize - (sx - ppu->mosaicModulo[sx]);
+    int w = MosaicRun(ppu, sx, layer);  // [lttp] upstream: mosaicSize - (sx - mosaicModulo[sx])
     do {
       w = IntMin(w, dstz_end - dstz);
       uint32 tile = *tp;
@@ -654,7 +676,7 @@ static void PpuDrawBackground_mode7(Ppu *ppu, uint y, bool sub, PpuZbufType z) {
     uint32 outside_value = ppu->m7largeField ? 0x3ffff : 0xffffffff;
     bool char_fill = ppu->m7charFill;
     if (mosaic_enabled) {
-      int w = ppu->mosaicSize - (x - ppu->mosaicModulo[x]);
+      int w = MosaicRun(ppu, x, 0);  // [lttp] upstream: mosaicSize - (x - mosaicModulo[x])
       do {
         w = IntMin(w, dstz_end - dstz);
         if ((uint32)(xpos | ypos) > outside_value) {
@@ -1260,7 +1282,9 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
       continue;
     // in y-range, get the x location, using the high bit as well
     int x = (ppu->oam[index] & 0xff) + (highOam & 1) * 256;
-    x -= (x >= 256 + extra_left_right) * 512;
+    // [lttp] with the picture moved, past the right edge where it's moved to; then moved
+    x -= (x >= 256 + extra_left_right + ppu->viewShift) * 512;
+    x -= ppu->viewShift;
     // if in x-range
     if (x <= -(spriteSize + extra_left_right))
       continue;

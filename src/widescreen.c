@@ -16,6 +16,11 @@
 // built as on entering it (Overworld_DrawQuadrantsAndOverlays: its screens from the ROM,
 // then its event overlay and bombed doors as the save has them).
 //
+// At the world's edges, with nothing past them, the picture is moved off them instead
+// (Widescreen_ViewShift): the camera stops at the edge, with the original's picture off
+// centre and the HUD where it was, and sprites are kept active, and ancillae drawn, as far
+// on the other side as it shows (ExtendScreenShift).
+//
 // Dungeons: a room is 512 pixels square, on a grid 16 rooms wide (room r at x = (r & 15) *
 // 512, y = (r >> 4 & 15) * 512; rooms 0x100 on are a grid of their own), the one Link walks
 // into past an edge the next on the grid. All of a room is in BG2's and BG1's 64x64
@@ -94,39 +99,75 @@ static uint16 WorldMap16(int x, int y) {
   return AreaMap16(area)[((y - ay) >> 4) * 64 + ((x - ax) >> 4)];
 }
 
-bool Widescreen_OverworldShowsNeighbors(void) {
+// Whether the game's outdoors, with the extra space drawn: not on the world map.
+static bool OverworldDrawn(void) {
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || g_zenv.ppu->extraLeftRight == 0)
     return false;
   int mod = main_module_index == 14 ? saved_module_for_menu : main_module_index;
+  if ((mod == 15 || mod == 16) && !player_is_indoors)
+    mod = 9;  // the spotlight closing or opening outdoors (ConfigurePpuSideSpace)
   if (mod != 9 || (main_module_index == 14 && submodule_index == 7 && overworld_map_state >= 4))
     return false;  // not outdoors, or the world map
-  if (overworld_screen_index >= 0x80)
-    return false;  // the special areas (the Master Sword's grove, Zora's waterfall...)
+  if (g_zenv.ppu->mode == 7)
+    return false;  // a map: the world map, or the flute's
   return TilemapIs64x64(&g_zenv.ppu->bgLayer[1]);  // as the game sets it
+}
+
+bool Widescreen_OverworldShowsNeighbors(void) {
+  // not the special areas (the Master Sword's grove, Zora's waterfall...)
+  return OverworldDrawn() && overworld_screen_index < 0x80;
+}
+
+int Widescreen_ViewShift(void) {
+  const Ppu *ppu = g_zenv.ppu;
+  if (!(ppu->renderFlags & kPpuRenderFlags_NewRenderer) || !OverworldDrawn())
+    return 0;
+  // what there is to draw: the world, or a special area by itself
+  int lo = 0, hi = kWorldSize;
+  if (overworld_screen_index >= 0x80)
+    lo = ow_scroll_vars0.xstart, hi = ow_scroll_vars0.xend + 256;
+  int extra = ppu->extraLeftRight, hs = BG2HOFS_copy2;
+  if (hs < lo || hs + 256 > hi || hi - lo < 256 + 2 * extra)
+    return 0;  // off it (only through walls), or narrower than the picture
+  int left = hs - extra, right = hs + 256 + extra;
+  return left < lo ? lo - left : right > hi ? hi - right : 0;
 }
 
 static void OverworldDrawNeighbors(void) {
   Ppu *ppu = g_zenv.ppu;
   int extra = ppu->extraLeftRight;
   int hs = BG2HOFS_copy2, vs = BG2VOFS_copy2;
+  int view = hs + ppu->viewShift;  // where the picture's moved to, at the world's edges
   // the area: 512 or 1024 pixels square, its camera kept 256x224 inside
   int area_size = ow_scroll_vars0.xend - ow_scroll_vars0.xstart + 256;
   int area_left = ow_scroll_vars0.xstart, area_right = area_left + area_size;
   int area_top = ow_scroll_vars0.ystart, area_bottom = area_top + area_size;
   const uint16 *map8 = GetMap16toMap8Table();
   uint16 base = ppu->bgLayer[1].tilemapAdr;
+  // In a large area the game keeps 512 of its 1024 pixels in the tilemap, from 128 or so left
+  // of the camera, which a picture moved right can go 20 past. There the area's own map,
+  // all of it in RAM while Link's about in it.
+  bool area_in_ram = main_module_index == 14 || submodule_index == 0;
 
-  int tx0 = IntMax(hs - extra, 0) >> 3, tx1 = IntMin(hs + 256 + extra + 7, kWorldSize) >> 3;
+  int tx0 = IntMax(view - extra, 0) >> 3, tx1 = IntMin(view + 256 + extra + 7, kWorldSize) >> 3;
   int ty0 = IntMax(vs, 0) >> 3, ty1 = IntMin(vs + 240 + 7, kWorldSize) >> 3;  // 240: extend_y
   for (int tx = tx0; tx < tx1; tx++) {
     int x = tx * 8;
+    // past what upstream draws, in a large area
+    bool beyond = area_size > 512 && (x + 8 <= hs - extra || x >= hs + 256 + extra);
     for (int ty = ty0; ty < ty1; ty++) {
       int y = ty * 8;
       if (x + 8 > hs && x < hs + 256 && y + 8 > vs && y < vs + 224)
         continue;  // in the original's picture, if only partly: the game's own
-      if (x >= area_left && x + 8 <= area_right && y >= area_top && y + 8 <= area_bottom)
-        continue;  // in the area: the game's own
-      WriteTile(TilemapAdr(base, tx, ty), map8[WorldMap16(x, y) * 4 + (ty & 1) * 2 + (tx & 1)]);
+      uint16 m16;
+      if (x >= area_left && x + 8 <= area_right && y >= area_top && y + 8 <= area_bottom) {
+        if (!beyond)
+          continue;  // in the area: the game's own
+        m16 = area_in_ram ? dung_bg2[((y - area_top) >> 4) * 64 + ((x - area_left) >> 4)] : WorldMap16(x, y);
+      } else {
+        m16 = WorldMap16(x, y);
+      }
+      WriteTile(TilemapAdr(base, tx, ty), map8[m16 * 4 + (ty & 1) * 2 + (tx & 1)]);
     }
   }
 }
