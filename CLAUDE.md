@@ -74,6 +74,13 @@ every reference save walked left and right, shots identical but where the pictur
 and there the old picture moved over but for the HUD; the spotlight into Skull Woods and out
 of the Eastern Palace, a walk down the world's left edge through a mosaic fade, the flute
 there (bird, map, landing), the menus; 4:3 identical.
+The dungeon slide (below) was checked off screen, 2026-11-01: nine dungeons walked through
+walls left and right and up and down (the shift follows the camera to a room's edge and
+glides through each scroll, never more than 3 a frame but across black screens and once
+off the top of the map); against 4:3 with sound off, of 180 shots where both runs were at
+the same place, 145 identical below the HUD's rows and the rest differing only in sprites; the
+item menu, the dungeon's map (moved back to 0 only once the screen's blanked), the spotlight
+out of Desert Palace (iris on Link), a spiral staircase in the Ice Palace, two pits.
 
 ## Frame pacing
 
@@ -107,10 +114,18 @@ To check a change leaves the original picture alone, run the same script with a 
 The world's edges: `ref 7` starts by Skull Woods 49 from the left edge (hold `L` and the
 picture's moved the full 71), `ref 1` and `ref 5` by the Eastern Palace and its dark world
 twin, 29 from the right. To compare with the build before, `git worktree add` it in the
-scratchpad, link in `zelda3_assets.dat`, build, and run the same script there. Runs side by
-side can disagree (seen 2026-11-01, three at once: Link posed differently 60 frames after a
-`ref`, where the same shots taken alone agreed; off screen no frame goes undrawn, so not the
-pacing), so rerun a difference alone before believing it.
+scratchpad, link in `zelda3_assets.dat`, build, and run the same script there; or, when
+only a file or two changed, compile those from `git show HEAD:<file>` in the scratchpad
+(the other headers symlinked beside them, not `-I src`, whose `features.h` hides glibc's)
+and link them with the tree's other objects. `/tmp` has a per-user quota that old
+scratchpads fill; `-pipe` keeps the compiler's temporary files out of it. Compare runs with
+`EnableAudio = 0` in the config: the game asks the audio thread whether music is playing
+(`ZeldaIsMusicPlaying`, for `APUI00`), so with sound on, runs differ with timing, even the
+same build twice with different gdb stops; with it off they repeat exactly. Through walls,
+Link meets enemies that widescreen keeps active and 4:3 doesn't, so long walks part ways.
+The ROM compare (Settings, below) can't follow a `ref`: under drive.py it fails at once
+(frame 23, the emulator's RAM still as at boot), with the build before the dungeon slide
+too. It also prints every frame after, enough to fill `/tmp`'s quota: count, don't log it.
 
 ## Widescreen
 
@@ -165,14 +180,34 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   jumps back as upstream blacks the sides. Things the game clips at the 256 with 8-bit screen
   x (garnishes, `Ancilla_ReturnIfOutsideBounds`; ancillae hit tiles only within it) do so
   nearer the middle when it's moved.
+- **The dungeon slide.** Indoors the same `viewShift` keeps the picture inside what's drawn
+  round the room: out from the original's picture, up to 142 a side, what's shown of the
+  room and the rooms `RoomBesideRoom` it (`MeasureSides`, with a `RoomView`: no tiles
+  built), then `FitShift`: as little as keeps all 398 in it, or to the middle of it if it's
+  narrower. 0 in dark rooms (header bit 0). As the game's sprite checks follow it, it's
+  game state, not drawing: `Widescreen_EndFrame`, from `ZeldaRunFrame` every frame drawn or
+  not, sets `g_dungeon_shift`, which `Widescreen_ViewShift` gives indoors and the draw uses
+  (clamped so the 256 never goes past what's drawn: a vertical scroll between rooms whose
+  sides differ shows a strip of black, as one width serves every line). In a room (and
+  menus over it, and 0x14, the pit's walk back) from `dungeon_room_index` and the camera; on
+  stairs, falls and warps from the room VRAM holds (as the drawing has it), held while it's
+  part way through one. Scrolling to the next quadrant or room (submodule 1 or 2) it goes
+  from where it was to where it'll be at the scroll's end, by how far along the camera is:
+  direction, start and end are taken as it begins, as the game clears
+  `overworld_screen_transition` before it's over. Held through the spotlight on the way out
+  (module 15 indoors, now drawn as the room); 0 on the dungeon's map between its blanks
+  (`overworld_map_state` 1 to 5). Other modules (death) drop it, as outdoors.
+  `Widescreen_Reset` after a load or reset.
 
 Also: `MosaicRun` (ppu.c) gives mosaic blocks left of the 256, where upstream read before
 `mosaicModulo` and streaked the extra space in mosaic fades; the flute's map (interface
 submodule 10) gets the world map's extents, where upstream drew it as outdoors.
 
-Still black (not done): rooms that don't look alike, or (all but houses and caves)
-unreachable rooms with other graphics (the edges' picture moving could do for those); the
-top corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge.
+Still black (not done): where what's drawn round a dungeon room is narrower than the
+picture (a house or cave quadrant by itself), and through a vertical scroll between rooms
+with different sides drawn (per-line extents would do); dark rooms past the original's
+picture; the dungeon's map at the left (upstream's extents with the camera at 0); the top
+corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge.
 
 Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
 pixels past either side of the 256, 7 short of 16:9's 71, so arrows and the like vanished

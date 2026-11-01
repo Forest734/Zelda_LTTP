@@ -150,6 +150,10 @@ static void ConfigurePpuSideSpace() {
   // it is (its iris goes black past the original's picture anyway)
   if ((mod == 15 || mod == 16) && !player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
     mod = 9;
+  // [lttp] and closing indoors, on the way out: drawn as the room, the picture kept where
+  // it's moved to (Widescreen_EndFrame)
+  else if (mod == 15 && player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
+    mod = 7;
   if (mod == 9) {
     if (main_module_index == 14 && (submodule_index == 7 && overworld_map_state >= 4 ||
         // [lttp] and the flute's (upstream drew it as outdoors, black at the left)
@@ -189,7 +193,8 @@ static void ConfigurePpuSideSpace() {
     if ((enhanced_features0 & kFeatures0_WidescreenVisualFixes) && cur_palace_index_x2 != 0xff)
       qy = 1;  // [lttp] likewise
     extra_bottom = IntMax(room_bounds_y.v[qy + 2] - BG2VOFS_copy2, 0);
-    Widescreen_DungeonSideSpace(&extra_left, &extra_right, &extra_bottom);  // [lttp] on into the rooms next door
+    // [lttp] on into the rooms next door, from where the picture's moved to
+    g_zenv.ppu->viewShift = Widescreen_DungeonSideSpace(&extra_left, &extra_right, &extra_bottom);
   } else if (mod == 20 || mod == 0 || mod == 1) {
     extra_left = kPpuExtraLeftRight, extra_right = kPpuExtraLeftRight;
     extra_bottom = 16;
@@ -415,7 +420,7 @@ void ZeldaReset(bool preserve_sram) {
   ZeldaRestoreMusicAfterLoad_Locked(true);
   ZeldaApuUnlock();
   EmuSynchronizeWholeState();
-
+  Widescreen_Reset();  // [lttp]
 }
 
 static void LoadSnesState(SaveLoadFunc *func, void *ctx) {
@@ -556,6 +561,7 @@ void StateRecorder_Load(StateRecorder *sr, FILE *f, bool replay_mode) {
     ByteArray_Destroy(&arr);
     assert(state.p == state.pend);
   }
+  Widescreen_Reset();  // [lttp] as it is in what's loaded
 }
 
 void StateRecorder_Save(StateRecorder *sr, FILE *f) {
@@ -773,6 +779,7 @@ bool ZeldaRunFrame(int inputs) {
   } else {
     g_emu_runframe(inputs, run_what);
   }
+  Widescreen_EndFrame();  // [lttp] where the picture's moved to indoors, drawn or not
 
   ZeldaPushApuState();
 

@@ -30,6 +30,13 @@
 // palette and layers. While the camera scrolls from one room to the next, the tilemaps
 // change over to the new room bit by bit, and the old one is drawn from a copy of its tiles
 // taken while Link was in it.
+//
+// Where what's past a room's edge isn't drawn (a room that wouldn't look right, or none),
+// the picture is moved away from it, as at the world's edges, if what is drawn is as wide
+// as the picture: the camera stops short of the edge. Scrolling over to the next quadrant
+// or room, the picture goes from where it was moved to where it's to be there, along with
+// the camera. As the game's sprite checks follow it, it's worked out from the game's state
+// at the end of each frame, drawn or not (Widescreen_EndFrame).
 #include "zelda_rtl.h"
 #include "variables.h"
 #include "overworld.h"
@@ -40,6 +47,10 @@
 // What's written into VRAM for a frame, to put back once it's drawn.
 static uint16 g_saved_adr[8192], g_saved_val[8192];
 static int g_saved_count;
+
+// Indoors, how far the picture's moved right (Widescreen_ViewShift), as worked out at the
+// end of the last frame; 0 elsewhere.
+static int g_dungeon_shift;
 
 static void WriteTile(uint16 adr, uint16 tile) {
   if (g_saved_count == countof(g_saved_adr))
@@ -120,8 +131,10 @@ bool Widescreen_OverworldShowsNeighbors(void) {
 
 int Widescreen_ViewShift(void) {
   const Ppu *ppu = g_zenv.ppu;
-  if (!(ppu->renderFlags & kPpuRenderFlags_NewRenderer) || !OverworldDrawn())
+  if (!(ppu->renderFlags & kPpuRenderFlags_NewRenderer))
     return 0;
+  if (!OverworldDrawn())
+    return g_dungeon_shift;  // 0 but indoors
   // what there is to draw: the world, or a special area by itself
   int lo = 0, hi = kWorldSize;
   if (overworld_screen_index >= 0x80)
@@ -188,11 +201,18 @@ static RoomMap g_room_maps[kNumRooms];
 static uint16 g_seen_room = 0xffff;
 static uint16 g_seen_bg[2 * kRoomTiles];
 
+// A room the picture's of, and what's shown of it.
+typedef struct RoomView {
+  int room;
+  int x0, x1, y0, y1;
+} RoomView;
+
 // This frame's: whether the rooms next door are drawn, the room whose own tiles are all in
 // VRAM (-1 while scrolling over to the next, when it's some of each) and how much of it is
-// shown, and the room they're to look like.
+// shown (none while scrolling), and the room they're to look like.
 static bool g_dungeon_drawn;
-static int g_own_room, g_own_x0, g_own_x1, g_own_y0, g_own_y1, g_like_room;
+static int g_own_room, g_like_room;
+static RoomView g_own;
 
 static const uint16 kInVram[1];  // RoomTiles: the game's own tiles are in VRAM
 
@@ -279,8 +299,9 @@ static const uint16 *BuiltRoomTiles(int room, int from) {
   return m->bg;
 }
 
-// Within a frame, the rooms looked up so far (the picture touches 4 at most).
-static struct { int room; const uint16 *bg; } g_rooms_found[4];
+// Within a frame, the rooms looked up so far (out to twice the extra space either side, 6
+// at most).
+static struct { int room; const uint16 *bg; } g_rooms_found[8];
 static int g_num_rooms_found;
 
 // A room's tiles, BG2's then BG1's, as they're to be drawn: kInVram if the game's own are
@@ -360,8 +381,28 @@ static void DungeonViewOrigin(int *hs, int *vs) {
   *vs = BG2VOFS_copy2 + ScrollDelta(bg2->vScroll, BG2VOFS_copy2);
 }
 
-// Works out this frame's g_own_room and g_like_room: false if the rooms next door aren't
-// drawn.
+// What's shown of a room with the camera at (hs, vs): false if the camera's elsewhere. All
+// of it in a palace. Houses and caves are put several to a room, a quadrant each, so there
+// only what the camera goes over, as upstream: its bounds are {a0, b0, a1, b1}, a for a
+// quadrant, b for the whole width or height.
+static bool GetRoomView(int room, int hs, int vs, RoomView *v) {
+  if (RoomAt(hs + 128, vs + 112) != room)
+    return false;
+  int x = (hs + 128) & ~511, y = (vs + 112) & ~511;
+  v->room = room;
+  v->x0 = x, v->x1 = x + 512, v->y0 = y, v->y1 = y + 512;
+  if (cur_palace_index_x2 == 0xff) {
+    int qx = quadrant_fullsize_x >> 1, qy = quadrant_fullsize_y >> 1;
+    v->x0 = IntMax(v->x0, room_bounds_x.v[qx]);
+    v->x1 = IntMin(v->x1, room_bounds_x.v[qx + 2] + 256);
+    v->y0 = IntMax(v->y0, room_bounds_y.v[qy]);
+    v->y1 = IntMin(v->y1, room_bounds_y.v[qy + 2] + 224);
+  }
+  return true;
+}
+
+// Works out this frame's g_own_room, g_own and g_like_room: false if the rooms next door
+// aren't drawn.
 static bool DungeonFrameSetup(void) {
   const Ppu *ppu = g_zenv.ppu;
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || ppu->extraLeftRight == 0)
@@ -376,41 +417,30 @@ static bool DungeonFrameSetup(void) {
     if (saved_module_for_menu != 7 || submodule_index == 3)
       return false;  // not indoors, or the dungeon's map
     own = g_seen_room;
-  } else if (main_module_index != 7) {
-    return false;
-  } else if (submodule_index == 2) {
+  } else if (main_module_index == 7 && submodule_index == 2) {
     if (cur_palace_index_x2 == 0xff)
       return false;  // in a cave the tilemaps can hold other caves (below)
     own = -1;
   } else if (DungeonInRoom()) {
     own = dungeon_room_index;
     SeeRoom(own);
-  } else {
-    // on the way to another room (stairs, a fall, a warp): while VRAM holds all of a room,
-    // the last one still or by now the next
+  } else if (main_module_index == 7 || main_module_index == 15 && player_is_indoors) {
+    // on the way to another room (stairs, a fall, a warp), or out (the spotlight closing):
+    // while VRAM holds all of a room, the last one still or by now the next
     if (!VramHoldsRamRoom())
       return false;
     own = RamHoldsSeenRoom() ? g_seen_room : dungeon_room_index;
+  } else {
+    return false;
   }
+  memset(&g_own, 0, sizeof(g_own));
   if (own >= 0) {
     int hs, vs;
     DungeonViewOrigin(&hs, &vs);
-    if (RoomAt(hs + 128, vs + 112) != own)
+    if (!GetRoomView(own, hs, vs, &g_own))
       return false;  // the camera's elsewhere
     if (own != g_seen_room)
       SeeRoom(own);
-    // What's shown of it: all of it in a palace. Houses and caves are put several to a
-    // room, a quadrant each, so there only what the camera goes over, as upstream: its
-    // bounds are {a0, b0, a1, b1}, a for a quadrant, b for the whole width or height.
-    int x = (hs + 128) & ~511, y = (vs + 112) & ~511;
-    g_own_x0 = x, g_own_x1 = x + 512, g_own_y0 = y, g_own_y1 = y + 512;
-    if (cur_palace_index_x2 == 0xff) {
-      int qx = quadrant_fullsize_x >> 1, qy = quadrant_fullsize_y >> 1;
-      g_own_x0 = IntMax(g_own_x0, room_bounds_x.v[qx]);
-      g_own_x1 = IntMin(g_own_x1, room_bounds_x.v[qx + 2] + 256);
-      g_own_y0 = IntMax(g_own_y0, room_bounds_y.v[qy]);
-      g_own_y1 = IntMin(g_own_y1, room_bounds_y.v[qy + 2] + 224);
-    }
   }
   if (g_seen_room == 0xffff)
     return false;
@@ -418,20 +448,30 @@ static bool DungeonFrameSetup(void) {
     return false;  // the lantern's light cone (upstream)
   // (A dark room's darkness falls on the rooms next door too, as on the original's picture.)
   g_own_room = own, g_like_room = own >= 0 ? own : g_seen_room;
-  if (own < 0)
-    g_own_x0 = g_own_x1 = g_own_y0 = g_own_y1 = 0;
   return true;
 }
 
-// Whether every room the rectangle [x0, x1) x [y0, y1) touches is to be drawn.
-static bool RoomsDrawn(int x0, int x1, int y0, int y1) {
+// Whether every room the rectangle [x0, x1) x [y0, y1) touches is drawn: as this frame's
+// tiles are if v is NULL, else as they'd be with the picture of v's room (what's shown of
+// it, and the rooms drawn beside it), nothing built.
+static bool RoomsDrawn(const RoomView *v, int x0, int x1, int y0, int y1) {
+  const RoomView *own = v ? v : &g_own;
   for (int y = y0 & ~511; y < y1; y += 512) {
     for (int x = x0 & ~511; x < x1; x += 512) {
-      const uint16 *bg = RoomTiles(RoomAt(x, y));
-      if (!bg)
-        return false;
-      if (bg == kInVram && (IntMax(x0, x) < g_own_x0 || IntMin(x1, x + 512) > g_own_x1 ||
-                            IntMax(y0, y) < g_own_y0 || IntMin(y1, y + 512) > g_own_y1))
+      int room = RoomAt(x, y);
+      bool is_own;
+      if (v) {
+        if (room < 0 || room != v->room && !RoomBesideRoom(v->room, room))
+          return false;
+        is_own = room == v->room;
+      } else {
+        const uint16 *bg = RoomTiles(room);
+        if (!bg)
+          return false;
+        is_own = bg == kInVram;
+      }
+      if (is_own && (IntMax(x0, x) < own->x0 || IntMin(x1, x + 512) > own->x1 ||
+                     IntMax(y0, y) < own->y0 || IntMin(y1, y + 512) > own->y1))
         return false;  // past what's shown of it
     }
   }
@@ -458,45 +498,145 @@ static int EdgeAbove(int x, int lo, int hi) {
   return e;
 }
 
-bool Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
-  g_num_rooms_found = 0;
-  g_dungeon_drawn = DungeonFrameSetup();
-  int extra = g_zenv.ppu->extraLeftRight, hs, vs;
-  DungeonViewOrigin(&hs, &vs);
-  if (!g_dungeon_drawn) {
-    if (enhanced_features0 & kFeatures0_WidescreenVisualFixes) {
-      // upstream's extents (by the whole room's camera bounds), kept to the room the camera's
-      // in: past it the tilemaps wrap round to its other side, and a camera kept to one
-      // quadrant can have bounds going past it
-      int rx = (hs + 128) & ~511, ry = (vs + 112) & ~511;
-      *left = IntMin(*left, IntMax(hs - rx, 0));
-      *right = IntMin(*right, IntMax(rx + 512 - hs - 256, 0));
-      *bottom = IntMin(*bottom, IntMax(ry + 512 - vs - 224, 0));
-    }
-    return false;
-  }
-  // out from the original's picture, room by room, as far as they're drawn
-  int l = 0, r = 0, b = 0;
-  while (l < extra) {
-    int x1 = hs - l, x0 = IntMax(EdgeBelow(x1, g_own_x0, g_own_x1), hs - extra);
-    if (!RoomsDrawn(x0, x1, vs, vs + 224))
+// How far past the left and right of the original's picture at (hs, vs) what's drawn goes
+// on, up to limit: out from it, room by room, as RoomsDrawn has it.
+static void MeasureSides(const RoomView *v, int hs, int vs, int limit, int *left, int *right) {
+  const RoomView *own = v ? v : &g_own;
+  int l = 0, r = 0;
+  while (l < limit) {
+    int x1 = hs - l, x0 = IntMax(EdgeBelow(x1, own->x0, own->x1), hs - limit);
+    if (!RoomsDrawn(v, x0, x1, vs, vs + 224))
       break;
     l = hs - x0;
   }
-  while (r < extra) {
-    int x0 = hs + 256 + r, x1 = IntMin(EdgeAbove(x0, g_own_x0, g_own_x1), hs + 256 + extra);
-    if (!RoomsDrawn(x0, x1, vs, vs + 224))
+  while (r < limit) {
+    int x0 = hs + 256 + r, x1 = IntMin(EdgeAbove(x0, own->x0, own->x1), hs + 256 + limit);
+    if (!RoomsDrawn(v, x0, x1, vs, vs + 224))
       break;
     r = x1 - hs - 256;
   }
-  while (b < 16) {  // with extend_y
-    int y0 = vs + 224 + b, y1 = IntMin(EdgeAbove(y0, g_own_y0, g_own_y1), vs + 240);
-    if (!RoomsDrawn(hs - l, hs + 256 + r, y0, y1))
+  *left = l, *right = r;
+}
+
+// How far to move the picture right, with l and r drawn past the left and right of the
+// original's: as little as keeps all of it in what's drawn, or if that's narrower than the
+// picture, to the middle of it.
+static int FitShift(int l, int r) {
+  int extra = g_zenv.ppu->extraLeftRight, lo = extra - l, hi = r - extra;
+  if (lo > hi)
+    return (r - l) / 2;
+  return lo > 0 ? lo : hi < 0 ? hi : 0;
+}
+
+// Where the picture of v's room is to be moved to, the camera at (hs, vs). Not in a dark
+// room, black past what the lantern lights (or past the original's picture: upstream).
+static int RoomViewShift(const RoomView *v, int hs, int vs) {
+  if (GetRoomHeaderPtr(v->room)[0] & 1)
+    return 0;
+  int l, r;
+  MeasureSides(v, hs, vs, 2 * g_zenv.ppu->extraLeftRight, &l, &r);
+  return FitShift(l, r);
+}
+
+// Scrolling over to the next quadrant or room (DungeonTransition_ScrollRoom), the picture
+// goes from where it was as the scroll began to where it's to be once there, as far along
+// as the camera is.
+static bool g_scrolling;
+static int g_scroll_dir, g_scroll_shift0, g_scroll_cam0, g_scroll_cam1;
+
+static int ScrollShift(void) {
+  if (!g_scrolling) {  // as it begins (the game clears the direction before it's over)
+    int dir = overworld_screen_transition & 3;  // down, up, right, left
+    int cam = dir >= 2 ? BG2HOFS_copy2 : BG2VOFS_copy2;
+    // where the camera stops: the target, mod 512, as it goes 4 at a time
+    int target = (&up_down_scroll_target)[dir];
+    int d = (dir & 1 ? (cam & 0x1fc) - target : target - (cam & 0x1fc)) & 0x1fc;
+    g_scrolling = true, g_scroll_dir = dir;
+    g_scroll_shift0 = g_dungeon_shift, g_scroll_cam0 = cam, g_scroll_cam1 = dir & 1 ? cam - d : cam + d;
+  }
+  bool across = g_scroll_dir >= 2;
+  int cam = across ? BG2HOFS_copy2 : BG2VOFS_copy2, cam1 = g_scroll_cam1;
+  int hs = across ? cam1 : BG2HOFS_copy2, vs = across ? BG2VOFS_copy2 : cam1;
+  RoomView v;
+  int s1 = GetRoomView(dungeon_room_index, hs, vs, &v) ? RoomViewShift(&v, hs, vs) : 0;
+  int total = cam1 - g_scroll_cam0, done = cam - g_scroll_cam0;
+  if (total == 0)
+    return s1;
+  done = total > 0 ? IntMin(IntMax(done, 0), total) : IntMax(IntMin(done, 0), total);
+  return g_scroll_shift0 + (s1 - g_scroll_shift0) * done / total;
+}
+
+void Widescreen_EndFrame(void) {
+  const Ppu *ppu = g_zenv.ppu;
+  int mod = main_module_index == 14 ? saved_module_for_menu : main_module_index;
+  if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || ppu->extraLeftRight == 0 ||
+      !(ppu->renderFlags & kPpuRenderFlags_NewRenderer) ||
+      !(mod == 7 || mod == 15 && player_is_indoors)) {
+    g_dungeon_shift = 0, g_scrolling = false;
+    return;
+  }
+  bool scrolling = main_module_index == 7 && (submodule_index == 1 || submodule_index == 2);
+  if (!scrolling)
+    g_scrolling = false;
+  int hs = BG2HOFS_copy2, vs = BG2VOFS_copy2;
+  RoomView v;
+  if (main_module_index == 15) {
+    // the spotlight closing on the way out: the picture stays where it is
+  } else if (main_module_index == 14 && submodule_index == 3 && (uint8)(overworld_map_state - 1) < 5) {
+    g_dungeon_shift = 0;  // the dungeon's map, from the room faded out to the map faded out
+  } else if (scrolling) {
+    g_dungeon_shift = ScrollShift();
+  } else if (main_module_index == 14 || DungeonInRoom()) {
+    if (main_module_index == 7)
+      SeeRoom(dungeon_room_index);  // as drawn or not (DungeonFrameSetup)
+    if (GetRoomView(dungeon_room_index, hs, vs, &v))
+      g_dungeon_shift = RoomViewShift(&v, hs, vs);
+  } else if (VramHoldsRamRoom()) {
+    // on the way to another room (stairs, a fall, a warp): the room whose picture VRAM
+    // holds, the last one still or by now the next (DungeonFrameSetup)
+    DungeonViewOrigin(&hs, &vs);
+    if (GetRoomView(RamHoldsSeenRoom() ? g_seen_room : dungeon_room_index, hs, vs, &v))
+      g_dungeon_shift = RoomViewShift(&v, hs, vs);
+  }
+  // else (VRAM part way through taking a room, the camera elsewhere) it stays where it is
+}
+
+void Widescreen_Reset(void) {
+  g_seen_room = 0xffff;
+  g_scrolling = false;
+  g_dungeon_shift = 0;
+  Widescreen_EndFrame();
+}
+
+int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
+  g_num_rooms_found = 0;
+  g_dungeon_drawn = DungeonFrameSetup();
+  if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes))
+    return 0;
+  int extra = g_zenv.ppu->extraLeftRight, hs, vs, l, r, b = 0;
+  DungeonViewOrigin(&hs, &vs);
+  if (g_dungeon_drawn) {
+    MeasureSides(NULL, hs, vs, 2 * extra, &l, &r);
+  } else {
+    // upstream's extents (by the whole room's camera bounds), kept to the room the camera's
+    // in: past it the tilemaps wrap round to its other side, and a camera kept to one
+    // quadrant can have bounds going past it
+    int rx = (hs + 128) & ~511, ry = (vs + 112) & ~511;
+    l = IntMin(*left, IntMax(hs - rx, 0));
+    r = IntMin(*right, IntMax(rx + 512 - hs - 256, 0));
+    b = IntMin(*bottom, IntMax(ry + 512 - vs - 224, 0));
+  }
+  // the picture moved (Widescreen_EndFrame), but not so far that any of the 256 isn't drawn
+  int s = IntMin(IntMax(g_dungeon_shift, -l), r);
+  l = IntMin(l + s, extra), r = IntMin(r - s, extra);
+  while (g_dungeon_drawn && b < 16) {  // with extend_y
+    int y0 = vs + 224 + b, y1 = IntMin(EdgeAbove(y0, g_own.y0, g_own.y1), vs + 240);
+    if (!RoomsDrawn(NULL, hs + s - l, hs + s + 256 + r, y0, y1))
       break;
     b = y1 - vs - 224;
   }
   *left = l, *right = r, *bottom = b;
-  return true;
+  return s;
 }
 
 static void DungeonDrawNeighbors(void) {
@@ -504,7 +644,8 @@ static void DungeonDrawNeighbors(void) {
   int hs, vs;
   DungeonViewOrigin(&hs, &vs);
   uint16 base2 = ppu->bgLayer[1].tilemapAdr, base1 = ppu->bgLayer[0].tilemapAdr;
-  int tx0 = (hs - ppu->extraLeftCur) >> 3, tx1 = (hs + 256 + ppu->extraRightCur + 7) >> 3;
+  int view = hs + ppu->viewShift;  // where the picture's moved to
+  int tx0 = (view - ppu->extraLeftCur) >> 3, tx1 = (view + 256 + ppu->extraRightCur + 7) >> 3;
   int ty0 = vs >> 3, ty1 = (vs + 224 + ppu->extraBottomCur + 7) >> 3;
   for (int tx = tx0; tx < tx1; tx++) {
     int x = tx * 8;

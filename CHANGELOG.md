@@ -48,6 +48,14 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   until the screen fades. Where the room next door has other graphics or colours, or is
   dark, it's still black, as it is in houses and caves except through a door. As on the
   overworld, the rooms next door are drawn without their enemies.
+- In widescreen, where what's past the edge of a dungeon room isn't drawn (the room next door
+  has other graphics, or there's none), the camera now stops short of the edge, as at the
+  world's edges: the picture shows the room up to its wall, with Link off centre and the HUD
+  where it was, instead of black. Scrolling to the next room, the picture glides from where
+  it was to where it'll be there, and it stays put through the menus and the spotlight on the
+  way out. Not in dark rooms, nor where all that's drawn is narrower than the picture (a cave
+  by itself). Enemies are kept active as far as it shows, so one now on screen at the far
+  side of a room may start moving, or talking, sooner than on the SNES.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini` (SMB's):
   the picture is scaled up by the largest whole number that fits and blended only for the
   rest, so in fullscreen or a resized window every dot is the same size and scrolling
