@@ -25,8 +25,14 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   edges of the world itself are still black. The areas next door are drawn without their
   enemies, which appear as Link goes in, as on the SNES.
 - In widescreen, in a dungeon room where the camera keeps to one part of the room, the
-  space at the sides shows the rest of the room, where upstream showed black. Past the
-  room's own edges it's still black (the next room isn't loaded until Link goes in).
+  space at the sides shows the rest of the room, where upstream showed black (not in houses
+  and caves, several of which share a room).
+- In widescreen, a dungeon goes on past the edges of the room Link is in: the space at the
+  sides shows the rooms next to it, as they'll be when he walks in (with the doors and
+  chests he's opened there), while he's in the room, scrolling to the next, and on stairs
+  until the screen fades. Where the room next door has other graphics or colours, or is
+  dark, it's still black, as it is in houses and caves except through a door. As on the
+  overworld, the rooms next door are drawn without their enemies.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini`, and on
   (SMB's): the picture is scaled up by the largest whole number that fits and blended only
   for the rest, so in fullscreen or a resized window every dot is the same size and

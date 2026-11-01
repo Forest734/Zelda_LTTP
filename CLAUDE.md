@@ -56,7 +56,11 @@ every chapter drawn into the extra columns, HUD centred; at the world's edges, a
 of a small area (chapter 7's swamp), the sides are black. The pacing fix was checked off
 screen with an LD_PRELOAD shim faking a 30 Hz vsync'd display (60 frames a second, 30
 drawn; 30 without the fix; 60 Hz unchanged), and the user played it on the Dell at full
-speed.
+speed. The dungeon rooms next door (below) were checked off screen only: walks through the
+walls of nine dungeons (the reference saves of chapters 2 to 12 but 5 and 7, which start
+outdoors), room-to-room scrolls (at 240 lines too), a
+spiral staircase in the Eastern Palace, a dozen house and cave entrances, the middle 256
+identical to 4:3, and every room of the 0x140 built by `Dungeon_LoadRoom` without an assert.
 
 ## Frame pacing
 
@@ -78,6 +82,12 @@ through the game, which reach most places quickly. Upstream's cheats make walks 
 script: `<frame> gdb call PatchCommand(69)` toggles walking through walls (`'E'`) and
 `PatchCommand(119)` fills life (`'w'`); with them Link walks straight across areas, though
 through a wall he can also walk into a dungeon, or off the map, where the game shows junk.
+Walking through walls is `g_ram[0x37f]`, kept in the save, so a `ref` turns it off; with it
+on, stairs and holes do nothing. From the 2nd chapter on, each reference save starts at the
+next dungeon's door (hold `U`). To go in at any entrance from the overworld, as
+`Overworld_Entrance` does: `gdb set var g_ram[0x10E] = <n>` (`which_entrance`; 1 is Link's
+house), then `g_ram[0x10] = 15`, `g_ram[0x10C] = 6`, `g_ram[0x11] = 0`, `g_ram[0xB0] = 0`.
+A `#` in a script line starts a comment, so a `gdb printf` can't use `%#x`.
 To check a change leaves the original picture alone, run the same script with a config at
 `ExtendedAspectRatio = 4:3` and compare its shots with the middle 256 of the wide ones
 (enemies near the edges differ: widescreen keeps them active 64 pixels further out).
@@ -98,15 +108,33 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   so the game's state never sees it. A tile touching the original 256x224 is never written.
   Note the swamp and the dam (0x7b, 0x3b) lose their event overlay when left (overworld.c,
   `Overworld_LoadGFXAndScreenSize`), so seen from next door they're drawn without it.
-- **Dungeon rooms.** A room is 512x512, all of it in the tilemap; `room_bounds_x/y` are
-  `{a0, b0, a1, b1}`, `a` the camera's bounds in a quadrant, `b` in the whole room, and
-  `quadrant_fullsize_x/y` picks which. `ConfigurePpuSideSpace` uses `b` always, so with the
-  camera kept to a quadrant the sides show the rest of the room. Past the room's edges is
-  the next room, not loaded: black. Lantern-dark rooms keep upstream's no extra space.
+- **Dungeon rooms.** A room (supertile) is 512x512, all of it in BG2's and BG1's 64x64
+  tilemaps (`dung_bg2`, `dung_bg1`), on a grid 16 wide: room `r` at x `(r & 15) * 512`, y
+  `(r >> 4) * 512` (houses and caves, 0x100 on, carry on at y 0x2000), and walking past an
+  edge leads to `r ± 1` or `r ± 16`. Since 398 < 512, the tilemaps' wrapped-round columns
+  are out of view, and the rooms next door are written there as on the overworld, built by
+  `Dungeon_LoadRoom` on a copy of `g_ram` (cached until `save_dung_info` of it or the rooms
+  round it changes). Only if `RoomsLookAlike`: the same palette (`pal0`), blockset and BG
+  layer setup in the room header, and not lights-out. In houses and caves
+  (`cur_palace_index_x2 == 0xff`) the grid means nothing, so only a room through a door
+  (both door tables, as `Dungeon_CheckAdjacentRoomsForOpenDoors`), and of the room itself
+  only the quadrant the camera's kept to: houses share a supertile, one a quadrant.
+  `room_bounds_x/y` are `{a0, b0, a1, b1}`, `a` the camera's bounds in a quadrant, `b` in
+  the whole room; `ConfigurePpuSideSpace`'s fallback uses `b` in palaces. While scrolling to
+  the next room (submodule 2) the old room is drawn from a copy taken while Link was in it
+  and the new one from RAM. On stairs, falls and warps the rooms next door are drawn while
+  VRAM's tilemaps equal RAM's and the camera's in that room, which is the old one until the
+  load (within 256 changed tiles: the stairs' priority bits) and the new one as it fades in.
+  Not drawn: lantern-dark rooms (upstream's no extra space), BG1 scrolled off BG2 (moving
+  floors), the dungeon map. Teleport edges (`dung_hdr_travel_destinations[4]`) lead
+  elsewhere than the grid shows.
 
-Still black (not done): past a dungeon room's edges; the edges of the world; the top
-corners of the tilted world map; and sprites in the outermost 7 pixels a side (active only
-64 out of 71).
+Still black (not done): rooms that don't look alike, or (all but houses and caves)
+unreachable rooms with other graphics; the edges of the world; the top corners of the tilted
+world map. Sprites: upstream's 64-pixel margin is short of 71: overworld sprites are loaded
+16 pixels wide at 64 to 80 pixels out to the left (`Sprite_ActivateWhenProximal`), so can
+appear up to 7 pixels inside the edge, and ancillae (arrows, the boomerang) are drawn only
+within 64 (`Ancilla_SetOam`) and end 52 out on the right (`Ancilla_TerminateIfOffscreen`).
 
 ## Settings (zelda3.ini)
 

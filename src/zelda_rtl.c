@@ -167,17 +167,19 @@ static void ConfigurePpuSideSpace() {
     if (!(hdr_dungeon_dark_with_lantern && TS_copy != 0)) {
       int qm = quadrant_fullsize_x >> 1;
       // [lttp] with the camera kept to a quadrant, the rest of the room too: it's all in the
-      // tilemap. Bounds are {a0, b0, a1, b1}: a the quadrant's, b the whole room's.
-      if (enhanced_features0 & kFeatures0_WidescreenVisualFixes)
+      // tilemap. Bounds are {a0, b0, a1, b1}: a the quadrant's, b the whole room's. Not in
+      // houses and caves, which are put several to a room, a quadrant each.
+      if ((enhanced_features0 & kFeatures0_WidescreenVisualFixes) && cur_palace_index_x2 != 0xff)
         qm = 1;
       extra_left = IntMax(BG2HOFS_copy2 - room_bounds_x.v[qm], 0);
       extra_right = IntMax(room_bounds_x.v[qm + 2] - BG2HOFS_copy2, 0);
     }
 
     int qy = quadrant_fullsize_y >> 1;
-    if (enhanced_features0 & kFeatures0_WidescreenVisualFixes)
+    if ((enhanced_features0 & kFeatures0_WidescreenVisualFixes) && cur_palace_index_x2 != 0xff)
       qy = 1;  // [lttp] likewise
     extra_bottom = IntMax(room_bounds_y.v[qy + 2] - BG2VOFS_copy2, 0);
+    Widescreen_DungeonSideSpace(&extra_left, &extra_right, &extra_bottom);  // [lttp] on into the rooms next door
   } else if (mod == 20 || mod == 0 || mod == 1) {
     extra_left = kPpuExtraLeftRight, extra_right = kPpuExtraLeftRight;
     extra_bottom = 16;
@@ -209,7 +211,7 @@ void ZeldaDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
 
   if (g_zenv.ppu->extraLeftRight != 0 || render_flags & kPpuRenderFlags_Height240)
     ConfigurePpuSideSpace();
-  Widescreen_OverworldDrawNeighbors();  // [lttp]
+  Widescreen_DrawNeighbors();  // [lttp]
 
   int height = render_flags & kPpuRenderFlags_Height240 ? 240 : 224;
 
@@ -228,7 +230,7 @@ void ZeldaDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
     SimpleHdma_DoLine(&hdma_chans[0]);
     SimpleHdma_DoLine(&hdma_chans[1]);
   }
-  Widescreen_OverworldRestore();  // [lttp]
+  Widescreen_Restore();  // [lttp]
 }
 
 void HdmaSetup(uint32 addr6, uint32 addr7, uint8 transfer_unit, uint8 reg6, uint8 reg7, uint8 indirect_bank) {
