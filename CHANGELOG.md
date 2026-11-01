@@ -20,6 +20,9 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   picture, and the flute's bird, carrying Link off, vanished with its shadow 23 pixels before
   the right edge: upstream's widescreen kept them 64 pixels out, where 16:9 shows 71. They
   now go on out of the picture, and enemies come and go a little further out of sight.
+- A gamepad with SNES-style buttons, such as the iBuffalo SNES Controller, had A and B, and X
+  and Y, swapped: SDL names its buttons by their labels, and `[GamepadMap]` by where they
+  sit. SDL now names them by where they sit too (SMAS's fix).
 
 ### Added
 

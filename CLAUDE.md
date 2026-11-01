@@ -68,7 +68,8 @@ spiral staircase in the Eastern Palace, a dozen house and cave entrances, the mi
 identical to 4:3, and every room of the 0x140 built by `Dungeon_LoadRoom` without an assert.
 The sprite margins (below) were checked off screen against the build before them: arrows
 both ways, and the flute's bird taking off (from x 4 on screen too) and landing, go past the
-edges at 16:9, and 305 shots of the same at 4:3 are identical.
+edges at 16:9, and 305 shots of the same at 4:3 are identical. The gamepad fix wasn't tried
+with a pad.
 
 ## Frame pacing
 
@@ -185,6 +186,13 @@ in a `--config` of your own, and `<frame> gdb call (int)setenv("SDL_VIDEO_DUMMY_
 Like SMB, zelda3 can run the original machine code beside the C code and compare RAM each
 frame (`./zelda3 zelda3.sfc`, at 4:3): the check for changes meant to leave the game as it
 was.
+
+Gamepads: `[GamepadMap]` names SDL's buttons, which since
+`SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS` is 0 (ours, SMAS's) are by position, A the
+bottom one, B right, X left, Y top, so its default is right for any pad. With the hint on,
+SDL's mapping for the user's pad (a Rockfire, 0583:2060, in SDL's list as the iBuffalo SNES
+Controller) names them by label, which swapped A with B and X with Y. Each pad is opened
+once (SDL also reports those in at the start as added) and closed when unplugged.
 
 ## Upstreams
 

@@ -425,6 +425,9 @@ int main(int argc, char** argv) {
     g_config.audio_samples = kDefaultSamples;
 
   // set up SDL
+  // [lttp] gamepads' buttons by where they sit, not what they're labelled (SMAS's): SDL's A is
+  // the bottom one on an SNES-style pad as on an Xbox one, which [GamepadMap] makes the SNES's B
+  SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
   if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
     printf("Failed to init SDL: %s\n", SDL_GetError());
     return 1;
@@ -504,6 +507,9 @@ int main(int argc, char** argv) {
       switch(event.type) {
       case SDL_CONTROLLERDEVICEADDED:
         OpenOneGamepad(event.cdevice.which);
+        break;
+      case SDL_CONTROLLERDEVICEREMOVED:  // [lttp] unplugged: SDL has let go of its buttons
+        SDL_GameControllerClose(SDL_GameControllerFromInstanceID(event.cdevice.which));
         break;
       case SDL_CONTROLLERAXISMOTION:
         HandleGamepadAxisInput(event.caxis.which, event.caxis.axis, event.caxis.value);
@@ -767,9 +773,14 @@ static void HandleInput(int keyCode, int keyMod, bool pressed) {
 
 static void OpenOneGamepad(int i) {
   if (SDL_IsGameController(i)) {
+    // [lttp] SDL says the ones in at the start were added too: open each once
+    if (SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(i)))
+      return;
     SDL_GameController *controller = SDL_GameControllerOpen(i);
     if (!controller)
       fprintf(stderr, "Could not open gamepad %d: %s\n", i, SDL_GetError());
+    else
+      printf("Gamepad: %s\n", SDL_GameControllerName(controller));  // [lttp]
   }
 }
 
