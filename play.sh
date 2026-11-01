@@ -20,7 +20,7 @@ fail() {
 
 build=(make -j"$(nproc)" LDFLAGS="-L$L -Wl,--disable-new-dtags -Wl,-rpath,$L/sdl2-classic:$L")
 if ! "${build[@]}" -q 2>/dev/null; then
-  notify-send "Zelda LTTP" "Building the latest code…" 2>/dev/null
+  notify-send -i "$PWD/resources/zelda-lttp.png" "Zelda LTTP" "Building the latest code…" 2>/dev/null
   if ! log=$("${build[@]}" 2>&1); then
     # the compiler's errors, not every command line's -Werror
     errors=$(grep -E -B2 -A3 -m 8 'error:|Error [0-9]|Exception' <<<"$log")

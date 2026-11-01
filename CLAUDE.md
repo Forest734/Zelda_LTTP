@@ -40,6 +40,11 @@ PATH=$R/bin:$PATH CFLAGS="-O2 -g -Werror -isystem $R/include/x86_64-linux-gnu" \
 Setting CFLAGS in the environment replaces upstream's `-O2 -Werror`, hence repeating them.
 The RPATH lets `./zelda3` run without `LD_LIBRARY_PATH`. The Makefile doesn't track header
 dependencies, so after changing a header, `make clean_obj` first.
+`./play.sh` is what the Zelda LTTP entry in the app menu runs
+(`~/.local/share/applications/zelda-lttp.desktop`, not in git; `StartupWMClass=zelda-lttp`,
+which play.sh sets), in the app grid's Games folder with Heretic, SMB and SMAS (gsettings
+`org.gnome.desktop.app-folders`). Its icon, `resources/zelda-lttp.png`, is the 256-pixel
+image from upstream's `src/platform/win32/triforce.ico`.
 
 The sources have CRLF line endings, and diffs should keep them: the Edit tool does; Python's
 text mode doesn't.

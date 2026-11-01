@@ -39,4 +39,5 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   scrolling doesn't shimmer. At the window's own size (`WindowScale`) it's as before. SDL
   output only; OpenGL takes it as `0`.
 - `play.sh`, which builds the program if its code changed and plays the game, showing any
-  build error in a dialog.
+  build error in a dialog, and a Triforce icon for it (`resources/zelda-lttp.png`, from
+  upstream's Windows icon), for a launcher in the app menu.
