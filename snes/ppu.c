@@ -36,7 +36,7 @@ enum {
 Ppu* ppu_init() {
   Ppu* ppu = (Ppu * )malloc(sizeof(Ppu));
   ppu->extraLeftRight = kPpuExtraLeftRight;
-  ppu->renderFlags = 0, ppu->viewShift = 0;  // [lttp]
+  ppu->renderFlags = 0, ppu->viewShift = 0, ppu->extraPerLine = false;  // [lttp]
   return ppu;
 }
 
@@ -51,7 +51,7 @@ void ppu_reset(Ppu* ppu) {
   ppu->extraLeftCur = 0;
   ppu->extraRightCur = 0;
   ppu->extraBottomCur = 0;
-  ppu->viewShift = 0;  // [lttp]
+  ppu->viewShift = 0, ppu->extraPerLine = false;  // [lttp]
   ppu->vramPointer = 0;
   ppu->vramIncrementOnHigh = false;
   ppu->vramIncrement = 1;
@@ -182,12 +182,18 @@ void ppu_runLine(Ppu *ppu, int line) {
 
     if (ppu->renderFlags & kPpuRenderFlags_NewRenderer) {
       // [lttp] the picture moved: BG1 and BG2 scrolled with it, for this line (HDMA can
-      // write their registers between lines)
+      // write their registers between lines); and the line's own space at the sides
       uint16 h0 = ppu->bgLayer[0].hScroll, h1 = ppu->bgLayer[1].hScroll;
+      uint8 left = ppu->extraLeftCur, right = ppu->extraRightCur;
       ppu->bgLayer[0].hScroll = (h0 + ppu->viewShift) & 0x3ff;
       ppu->bgLayer[1].hScroll = (h1 + ppu->viewShift) & 0x3ff;
+      if (ppu->extraPerLine && line <= countof(ppu->extraLeftLine)) {
+        ppu->extraLeftCur = ppu->extraLeftLine[line - 1];
+        ppu->extraRightCur = ppu->extraRightLine[line - 1];
+      }
       PpuDrawWholeLine(ppu, line);
       ppu->bgLayer[0].hScroll = h0, ppu->bgLayer[1].hScroll = h1;
+      ppu->extraLeftCur = left, ppu->extraRightCur = right;
     } else {
       if (ppu->mode == 7)
         ppu_calculateMode7Starts(ppu, line);

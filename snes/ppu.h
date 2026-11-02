@@ -57,6 +57,11 @@ struct Ppu {
   // right edge shown in its place: BG1, BG2, the sprites and the windows, not BG3 (the HUD).
   // Widescreen, at the edges of the world. Only the new renderer.
   int16_t viewShift;
+  // [lttp] With extraPerLine, each line's own space at the sides (by its y on screen), at
+  // most extraLeftCur and extraRightCur, which are the most of any line: widescreen indoors,
+  // where the rooms above and below differ. Only the new renderer.
+  bool extraPerLine;
+  uint8_t extraLeftLine[240], extraRightLine[240];
   float mode7PerspectiveLow, mode7PerspectiveHigh;
 
   // TMW / TSW etc

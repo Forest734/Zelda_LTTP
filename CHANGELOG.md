@@ -53,7 +53,9 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   world's edges: the picture shows the room up to its wall, with Link off centre and the HUD
   where it was, instead of black. Scrolling to the next room, the picture glides from where
   it was to where it'll be there, and it stays put through the menus and the spotlight on the
-  way out. Not in dark rooms, nor where all that's drawn is narrower than the picture (a cave
+  way out. Scrolling up or down, each room's part of the picture goes on as far as is drawn
+  beside it, and the picture moves over while little of the next room shows, so black shows
+  only past the wall of the room coming in or going out, in its few lines, for a few frames. Not in dark rooms, nor where all that's drawn is narrower than the picture (a cave
   by itself). Enemies are kept active as far as it shows, so one now on screen at the far
   side of a room may start moving, or talking, sooner than on the SNES.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini` (SMB's):

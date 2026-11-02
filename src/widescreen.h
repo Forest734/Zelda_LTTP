@@ -18,7 +18,9 @@ void Widescreen_EndFrame(void);
 void Widescreen_Reset(void);
 // Indoors, how far the picture goes on to each side and below, on into the rooms next door
 // as far as they're drawn (if they aren't, upstream's extents, kept to the room the
-// camera's in), from where it's moved to, and how far that is (Ppu.viewShift).
+// camera's in), from where it's moved to, and how far that is (Ppu.viewShift). Where it
+// goes on less in some lines than others (rooms above and below whose sides differ), the
+// most of any, and each line's own in Ppu.extraLeftLine and extraRightLine.
 int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom);
 // Around the PPU's drawing of a frame: put the neighbours' tiles in the tilemaps past the
 // area's or room's edges, then put back what was there.

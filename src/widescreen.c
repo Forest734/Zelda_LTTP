@@ -36,7 +36,9 @@
 // as the picture: the camera stops short of the edge. Scrolling over to the next quadrant
 // or room, the picture goes from where it was moved to where it's to be there, along with
 // the camera. As the game's sprite checks follow it, it's worked out from the game's state
-// at the end of each frame, drawn or not (Widescreen_EndFrame).
+// at the end of each frame, drawn or not (Widescreen_EndFrame). The space at the sides is
+// worked out line by line, so a room above or below that has less drawn at a side doesn't
+// cut this one's short.
 #include "zelda_rtl.h"
 #include "variables.h"
 #include "overworld.h"
@@ -49,8 +51,9 @@ static uint16 g_saved_adr[8192], g_saved_val[8192];
 static int g_saved_count;
 
 // Indoors, how far the picture's moved right (Widescreen_ViewShift), as worked out at the
-// end of the last frame; 0 elsewhere.
-static int g_dungeon_shift;
+// end of the last frame; 0 elsewhere. And how far it could have been, lo to hi, and shown
+// no more black.
+static int g_dungeon_shift, g_dungeon_lo, g_dungeon_hi;
 
 static void WriteTile(uint16 adr, uint16 tile) {
   if (g_saved_count == countof(g_saved_adr))
@@ -498,51 +501,56 @@ static int EdgeAbove(int x, int lo, int hi) {
   return e;
 }
 
-// How far past the left and right of the original's picture at (hs, vs) what's drawn goes
-// on, up to limit: out from it, room by room, as RoomsDrawn has it.
-static void MeasureSides(const RoomView *v, int hs, int vs, int limit, int *left, int *right) {
+// How far past the left and right of the original's picture, its camera at hs, what's
+// drawn goes on in the lines of the dungeon from y0 to y1, up to limit: out from it, room by
+// room, as RoomsDrawn has it.
+static void MeasureSides(const RoomView *v, int hs, int y0, int y1, int limit, int *left, int *right) {
   const RoomView *own = v ? v : &g_own;
   int l = 0, r = 0;
   while (l < limit) {
     int x1 = hs - l, x0 = IntMax(EdgeBelow(x1, own->x0, own->x1), hs - limit);
-    if (!RoomsDrawn(v, x0, x1, vs, vs + 224))
+    if (!RoomsDrawn(v, x0, x1, y0, y1))
       break;
     l = hs - x0;
   }
   while (r < limit) {
     int x0 = hs + 256 + r, x1 = IntMin(EdgeAbove(x0, own->x0, own->x1), hs + 256 + limit);
-    if (!RoomsDrawn(v, x0, x1, vs, vs + 224))
+    if (!RoomsDrawn(v, x0, x1, y0, y1))
       break;
     r = x1 - hs - 256;
   }
   *left = l, *right = r;
 }
 
-// How far to move the picture right, with l and r drawn past the left and right of the
-// original's: as little as keeps all of it in what's drawn, or if that's narrower than the
-// picture, to the middle of it.
-static int FitShift(int l, int r) {
-  int extra = g_zenv.ppu->extraLeftRight, lo = extra - l, hi = r - extra;
-  if (lo > hi)
-    return (r - l) / 2;
-  return lo > 0 ? lo : hi < 0 ? hi : 0;
+// How far right the picture of v's room can be moved, lo to hi, the camera at (hs, vs), and
+// all of it be in what's drawn; if that's narrower than the picture, just to the middle of
+// it. Not at all in a dark room, black past what the lantern lights (or past the original's
+// picture: upstream).
+static void RoomViewRange(const RoomView *v, int hs, int vs, int *lo, int *hi) {
+  int extra = g_zenv.ppu->extraLeftRight, l, r;
+  if (GetRoomHeaderPtr(v->room)[0] & 1) {
+    *lo = *hi = 0;
+    return;
+  }
+  MeasureSides(v, hs, vs, vs + 224, 2 * extra, &l, &r);
+  *lo = extra - l, *hi = r - extra;
+  if (*lo > *hi)
+    *lo = *hi = (r - l) / 2;
 }
 
-// Where the picture of v's room is to be moved to, the camera at (hs, vs). Not in a dark
-// room, black past what the lantern lights (or past the original's picture: upstream).
-static int RoomViewShift(const RoomView *v, int hs, int vs) {
-  if (GetRoomHeaderPtr(v->room)[0] & 1)
-    return 0;
-  int l, r;
-  MeasureSides(v, hs, vs, 2 * g_zenv.ppu->extraLeftRight, &l, &r);
-  return FitShift(l, r);
+// Where it's to be moved to: as little as keeps it in what's drawn.
+static int RangeShift(int lo, int hi) {
+  return IntMin(IntMax(0, lo), hi);
 }
 
 // Scrolling over to the next quadrant or room (DungeonTransition_ScrollRoom), the picture
 // goes from where it was as the scroll began to where it's to be once there, as far along
-// as the camera is.
+// as the camera is. Up or down, the picture's of both at once, the new coming in at the top
+// or bottom, and the old going out, so it goes as fast as the camera to where it suits both
+// (if anywhere does) while there's little of the new, and from there to where it's to be
+// once there's little left of the old.
 static bool g_scrolling;
-static int g_scroll_dir, g_scroll_shift0, g_scroll_cam0, g_scroll_cam1;
+static int g_scroll_dir, g_scroll_shift0, g_scroll_lo0, g_scroll_hi0, g_scroll_cam0, g_scroll_cam1;
 
 static int ScrollShift(void) {
   if (!g_scrolling) {  // as it begins (the game clears the direction before it's over)
@@ -552,18 +560,34 @@ static int ScrollShift(void) {
     int target = (&up_down_scroll_target)[dir];
     int d = (dir & 1 ? (cam & 0x1fc) - target : target - (cam & 0x1fc)) & 0x1fc;
     g_scrolling = true, g_scroll_dir = dir;
-    g_scroll_shift0 = g_dungeon_shift, g_scroll_cam0 = cam, g_scroll_cam1 = dir & 1 ? cam - d : cam + d;
+    g_scroll_shift0 = g_dungeon_shift, g_scroll_lo0 = g_dungeon_lo, g_scroll_hi0 = g_dungeon_hi;
+    g_scroll_cam0 = cam, g_scroll_cam1 = dir & 1 ? cam - d : cam + d;
   }
   bool across = g_scroll_dir >= 2;
   int cam = across ? BG2HOFS_copy2 : BG2VOFS_copy2, cam1 = g_scroll_cam1;
   int hs = across ? cam1 : BG2HOFS_copy2, vs = across ? BG2VOFS_copy2 : cam1;
   RoomView v;
-  int s1 = GetRoomView(dungeon_room_index, hs, vs, &v) ? RoomViewShift(&v, hs, vs) : 0;
+  int lo1 = 0, hi1 = 0;
+  if (GetRoomView(dungeon_room_index, hs, vs, &v))
+    RoomViewRange(&v, hs, vs, &lo1, &hi1);
+  int s0 = g_scroll_shift0, s1 = RangeShift(lo1, hi1);
+  // how far the camera's to go, and has gone
   int total = cam1 - g_scroll_cam0, done = cam - g_scroll_cam0;
+  if (total < 0)
+    total = -total, done = -done;
   if (total == 0)
     return s1;
-  done = total > 0 ? IntMin(IntMax(done, 0), total) : IntMax(IntMin(done, 0), total);
-  return g_scroll_shift0 + (s1 - g_scroll_shift0) * done / total;
+  done = IntMin(IntMax(done, 0), total);
+  int s = s0 + (s1 - s0) * done / total;
+  if (!across && abs(s1 - s0) <= total) {
+    int lo = IntMax(g_scroll_lo0, lo1), hi = IntMin(g_scroll_hi0, hi1);
+    if (lo <= hi)
+      s = IntMin(IntMax(s, lo), hi);
+    // no faster than the camera from s0, and in time to be at s1 at the end
+    s = IntMax(s, IntMax(s0 - done, s1 - (total - done)));
+    s = IntMin(s, IntMin(s0 + done, s1 + (total - done)));
+  }
+  return s;
 }
 
 void Widescreen_EndFrame(void) {
@@ -572,7 +596,7 @@ void Widescreen_EndFrame(void) {
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || ppu->extraLeftRight == 0 ||
       !(ppu->renderFlags & kPpuRenderFlags_NewRenderer) ||
       !(mod == 7 || mod == 15 && player_is_indoors)) {
-    g_dungeon_shift = 0, g_scrolling = false;
+    g_dungeon_shift = g_dungeon_lo = g_dungeon_hi = 0, g_scrolling = false;
     return;
   }
   bool scrolling = main_module_index == 7 && (submodule_index == 1 || submodule_index == 2);
@@ -580,6 +604,7 @@ void Widescreen_EndFrame(void) {
     g_scrolling = false;
   int hs = BG2HOFS_copy2, vs = BG2VOFS_copy2;
   RoomView v;
+  bool viewed = false;  // a room's picture, with its range
   if (main_module_index == 15) {
     // the spotlight closing on the way out: the picture stays where it is
   } else if (main_module_index == 14 && submodule_index == 3 && (uint8)(overworld_map_state - 1) < 5) {
@@ -589,22 +614,26 @@ void Widescreen_EndFrame(void) {
   } else if (main_module_index == 14 || DungeonInRoom()) {
     if (main_module_index == 7)
       SeeRoom(dungeon_room_index);  // as drawn or not (DungeonFrameSetup)
-    if (GetRoomView(dungeon_room_index, hs, vs, &v))
-      g_dungeon_shift = RoomViewShift(&v, hs, vs);
+    viewed = GetRoomView(dungeon_room_index, hs, vs, &v);
   } else if (VramHoldsRamRoom()) {
     // on the way to another room (stairs, a fall, a warp): the room whose picture VRAM
     // holds, the last one still or by now the next (DungeonFrameSetup)
     DungeonViewOrigin(&hs, &vs);
-    if (GetRoomView(RamHoldsSeenRoom() ? g_seen_room : dungeon_room_index, hs, vs, &v))
-      g_dungeon_shift = RoomViewShift(&v, hs, vs);
+    viewed = GetRoomView(RamHoldsSeenRoom() ? g_seen_room : dungeon_room_index, hs, vs, &v);
   }
   // else (VRAM part way through taking a room, the camera elsewhere) it stays where it is
+  if (viewed) {
+    RoomViewRange(&v, hs, vs, &g_dungeon_lo, &g_dungeon_hi);
+    g_dungeon_shift = RangeShift(g_dungeon_lo, g_dungeon_hi);
+  } else {
+    g_dungeon_lo = g_dungeon_hi = g_dungeon_shift;
+  }
 }
 
 void Widescreen_Reset(void) {
   g_seen_room = 0xffff;
   g_scrolling = false;
-  g_dungeon_shift = 0;
+  g_dungeon_shift = g_dungeon_lo = g_dungeon_hi = 0;
   Widescreen_EndFrame();
 }
 
@@ -613,29 +642,57 @@ int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
   g_dungeon_drawn = DungeonFrameSetup();
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes))
     return 0;
-  int extra = g_zenv.ppu->extraLeftRight, hs, vs, l, r, b = 0;
+  Ppu *ppu = g_zenv.ppu;
+  int extra = ppu->extraLeftRight, hs, vs;
   DungeonViewOrigin(&hs, &vs);
-  if (g_dungeon_drawn) {
-    MeasureSides(NULL, hs, vs, 2 * extra, &l, &r);
-  } else {
+  if (!g_dungeon_drawn) {
     // upstream's extents (by the whole room's camera bounds), kept to the room the camera's
     // in: past it the tilemaps wrap round to its other side, and a camera kept to one
     // quadrant can have bounds going past it
     int rx = (hs + 128) & ~511, ry = (vs + 112) & ~511;
-    l = IntMin(*left, IntMax(hs - rx, 0));
-    r = IntMin(*right, IntMax(rx + 512 - hs - 256, 0));
-    b = IntMin(*bottom, IntMax(ry + 512 - vs - 224, 0));
+    int l = IntMin(*left, IntMax(hs - rx, 0));
+    int r = IntMin(*right, IntMax(rx + 512 - hs - 256, 0));
+    // the picture moved (Widescreen_EndFrame), but not so far that any of the 256 isn't drawn
+    int s = IntMin(IntMax(g_dungeon_shift, -l), r);
+    *left = IntMin(l + s, extra), *right = IntMin(r - s, extra);
+    *bottom = IntMin(*bottom, IntMax(ry + 512 - vs - 224, 0));
+    return s;
+  }
+  // What's drawn past the sides, in bands down the picture split where it can change: at
+  // the edges of rooms, and of what's shown of the camera's; and at the bottom of the
+  // original's 224, on past which (with extend_y) a band is shown only while all of the 256
+  // is drawn.
+  enum { kMaxBands = 8 };
+  int band_y[kMaxBands + 1], band_l[kMaxBands], band_r[kMaxBands], n = 0;
+  int least_l = 2 * extra, least_r = 2 * extra;  // of any band in the 224
+  for (int y = vs; y < vs + 240 && n < kMaxBands; n++) {
+    int y1 = IntMin(EdgeAbove(y, g_own.y0, g_own.y1), y < vs + 224 ? vs + 224 : vs + 240);
+    MeasureSides(NULL, hs, y, y1, 2 * extra, &band_l[n], &band_r[n]);
+    if (y < vs + 224)
+      least_l = IntMin(least_l, band_l[n]), least_r = IntMin(least_r, band_r[n]);
+    band_y[n] = y, band_y[n + 1] = y = y1;
   }
   // the picture moved (Widescreen_EndFrame), but not so far that any of the 256 isn't drawn
-  int s = IntMin(IntMax(g_dungeon_shift, -l), r);
-  l = IntMin(l + s, extra), r = IntMin(r - s, extra);
-  while (g_dungeon_drawn && b < 16) {  // with extend_y
-    int y0 = vs + 224 + b, y1 = IntMin(EdgeAbove(y0, g_own.y0, g_own.y1), vs + 240);
-    if (!RoomsDrawn(NULL, hs + s - l, hs + s + 256 + r, y0, y1))
-      break;
-    b = y1 - vs - 224;
+  int s = IntMin(IntMax(g_dungeon_shift, -least_l), least_r);
+  int most_l = 0, most_r = 0, b = 0;
+  bool differ = false;
+  for (int i = 0; i < n; i++) {
+    int y0 = band_y[i], y1 = band_y[i + 1];
+    if (y0 >= vs + 224) {
+      if (band_l[i] < -s || band_r[i] < s ||
+          !RoomsDrawn(NULL, hs + IntMin(s, 0), hs + 256 + IntMax(s, 0), y0, y1))
+        break;
+      b = y1 - vs - 224;
+    }
+    int l = IntMin(band_l[i] + s, extra), r = IntMin(band_r[i] - s, extra);
+    if (i > 0 && (l != ppu->extraLeftLine[y0 - 1 - vs] || r != ppu->extraRightLine[y0 - 1 - vs]))
+      differ = true;
+    memset(&ppu->extraLeftLine[y0 - vs], l, y1 - y0);
+    memset(&ppu->extraRightLine[y0 - vs], r, y1 - y0);
+    most_l = IntMax(most_l, l), most_r = IntMax(most_r, r);
   }
-  *left = l, *right = r, *bottom = b;
+  ppu->extraPerLine = differ;
+  *left = most_l, *right = most_r, *bottom = b;
   return s;
 }
 

@@ -81,6 +81,11 @@ off the top of the map); against 4:3 with sound off, of 180 shots where both run
 the same place, 145 identical below the HUD's rows and the rest differing only in sprites; the
 item menu, the dungeon's map (moved back to 0 only once the screen's blanked), the spotlight
 out of Desert Palace (iris on Link), a spiral staircase in the Ice Palace, two pits.
+Per-line sides in vertical scrolls, checked off screen the same day: nine dungeons walked
+up and down through walls (eight of them in three columns), 83 scrolls; in 15, between rooms whose
+sides differ, each room's lines kept their own sides and the shift went 4 a frame with no
+clamping; against the build before, its black strip down the whole picture (to 62 wide)
+gone; 4:3 identical.
 
 ## Frame pacing
 
@@ -183,18 +188,27 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
 - **The dungeon slide.** Indoors the same `viewShift` keeps the picture inside what's drawn
   round the room: out from the original's picture, up to 142 a side, what's shown of the
   room and the rooms `RoomBesideRoom` it (`MeasureSides`, with a `RoomView`: no tiles
-  built), then `FitShift`: as little as keeps all 398 in it, or to the middle of it if it's
-  narrower. 0 in dark rooms (header bit 0). As the game's sprite checks follow it, it's
-  game state, not drawing: `Widescreen_EndFrame`, from `ZeldaRunFrame` every frame drawn or
-  not, sets `g_dungeon_shift`, which `Widescreen_ViewShift` gives indoors and the draw uses
-  (clamped so the 256 never goes past what's drawn: a vertical scroll between rooms whose
-  sides differ shows a strip of black, as one width serves every line). In a room (and
+  built), then `RoomViewRange`: the shifts, lo to hi, that keep all 398 in it, or the middle
+  of it if it's narrower; `RangeShift` takes the least. 0 in dark rooms (header bit 0). As
+  the game's sprite checks follow it, it's game state, not drawing: `Widescreen_EndFrame`,
+  from `ZeldaRunFrame` every frame drawn or not, sets `g_dungeon_shift` (and the range,
+  `g_dungeon_lo`/`hi`), which `Widescreen_ViewShift` gives indoors and the draw uses,
+  clamped so the 256 never goes past what's drawn. The draw measures the sides in bands down
+  the picture, split at rooms' edges (and of what's shown of the camera's, and at line 224),
+  and where bands differ gives each line its own (`Ppu.extraPerLine`, `extraLeftLine`,
+  `extraRightLine`, which `ppu_runLine` swaps in as it does the shift): a room above or
+  below with less drawn at a side doesn't cut this one's short. In a room (and
   menus over it, and 0x14, the pit's walk back) from `dungeon_room_index` and the camera; on
   stairs, falls and warps from the room VRAM holds (as the drawing has it), held while it's
   part way through one. Scrolling to the next quadrant or room (submodule 1 or 2) it goes
   from where it was to where it'll be at the scroll's end, by how far along the camera is:
   direction, start and end are taken as it begins, as the game clears
-  `overworld_screen_transition` before it's over. Held through the spotlight on the way out
+  `overworld_screen_transition` before it's over. Up or down, both rooms are in the picture
+  at once, so `ScrollShift` goes as fast as the camera (4 a frame) into the shifts both
+  rooms' ranges allow, while there's little of the new one, and on to where it'll be once
+  there's little left of the old; with none they both allow (a dark room), as far along as
+  the camera is. Black then shows only past the wall of the room coming in or going out,
+  in its few lines, for a few frames. Held through the spotlight on the way out
   (module 15 indoors, now drawn as the room); 0 on the dungeon's map between its blanks
   (`overworld_map_state` 1 to 5). Other modules (death) drop it, as outdoors.
   `Widescreen_Reset` after a load or reset.
@@ -204,9 +218,8 @@ Also: `MosaicRun` (ppu.c) gives mosaic blocks left of the 256, where upstream re
 submodule 10) gets the world map's extents, where upstream drew it as outdoors.
 
 Still black (not done): where what's drawn round a dungeon room is narrower than the
-picture (a house or cave quadrant by itself), and through a vertical scroll between rooms
-with different sides drawn (per-line extents would do); dark rooms past the original's
-picture; the dungeon's map at the left (upstream's extents with the camera at 0); the top
+picture (a house or cave quadrant by itself), and briefly past a wall in a vertical
+scroll (above); dark rooms past the original's picture; the dungeon's map at the left (upstream's extents with the camera at 0); the top
 corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge.
 
 Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
