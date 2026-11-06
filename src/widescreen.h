@@ -22,6 +22,10 @@ void Widescreen_Reset(void);
 // goes on less in some lines than others (rooms above and below whose sides differ), the
 // most of any, and each line's own in Ppu.extraLeftLine and extraRightLine.
 int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom);
+// Dying, once BG1 and BG2 are off (the red, then black, behind Link, the HUD and the game
+// over menu), and in the frame after, in which a choice made on the menu is still shown:
+// true, and how far the picture's moved, as it was before (the backdrop fills the sides).
+bool Widescreen_DeathBackdrop(int *shift);
 // Around the PPU's drawing of a frame: put the neighbours' tiles in the tilemaps past the
 // area's or room's edges, then put back what was there.
 void Widescreen_DrawNeighbors(void);

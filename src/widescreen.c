@@ -55,6 +55,11 @@ static int g_saved_count;
 // no more black.
 static int g_dungeon_shift, g_dungeon_lo, g_dungeon_hi;
 
+// Death (module 18): how far the picture's moved, as it was before it, and whether this
+// frame's the one after it (Widescreen_DeathBackdrop).
+static int g_death_shift;
+static bool g_dying, g_after_death;
+
 static void WriteTile(uint16 adr, uint16 tile) {
   if (g_saved_count == countof(g_saved_adr))
     return;
@@ -117,9 +122,10 @@ static uint16 WorldMap16(int x, int y) {
 static bool OverworldDrawn(void) {
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || g_zenv.ppu->extraLeftRight == 0)
     return false;
-  int mod = main_module_index == 14 ? saved_module_for_menu : main_module_index;
-  if ((mod == 15 || mod == 16) && !player_is_indoors)
-    mod = 9;  // the spotlight closing or opening outdoors (ConfigurePpuSideSpace)
+  // under the menus and death, the module they were opened from (ConfigurePpuSideSpace)
+  int mod = main_module_index == 14 || main_module_index == 18 ? saved_module_for_menu : main_module_index;
+  if ((mod == 15 || mod == 16 || mod == 17) && !player_is_indoors)
+    mod = 9;  // the spotlight closing or opening outdoors, or a fall (ConfigurePpuSideSpace)
   if (mod != 9 || (main_module_index == 14 && submodule_index == 7 && overworld_map_state >= 4))
     return false;  // not outdoors, or the world map
   if (g_zenv.ppu->mode == 7)
@@ -128,8 +134,11 @@ static bool OverworldDrawn(void) {
 }
 
 bool Widescreen_OverworldShowsNeighbors(void) {
-  // not the special areas (the Master Sword's grove, Zora's waterfall...)
-  return OverworldDrawn() && overworld_screen_index < 0x80;
+  // not the special areas (the Master Sword's grove, Zora's waterfall...), nor with BG2 off
+  // (dying, once the picture's gone)
+  const Ppu *ppu = g_zenv.ppu;
+  return OverworldDrawn() && overworld_screen_index < 0x80 &&
+      ((ppu->screenEnabled[0] | ppu->screenEnabled[1]) & 2);
 }
 
 int Widescreen_ViewShift(void) {
@@ -427,9 +436,11 @@ static bool DungeonFrameSetup(void) {
   } else if (DungeonInRoom()) {
     own = dungeon_room_index;
     SeeRoom(own);
-  } else if (main_module_index == 7 || main_module_index == 15 && player_is_indoors) {
-    // on the way to another room (stairs, a fall, a warp), or out (the spotlight closing):
-    // while VRAM holds all of a room, the last one still or by now the next
+  } else if (main_module_index == 7 || (main_module_index == 15 || main_module_index == 17 ||
+                                        main_module_index == 18) && player_is_indoors) {
+    // on the way to another room (stairs, a fall, a warp), or out (the spotlight closing),
+    // or carried off by a Wallmaster, landing from a hole, or dying: while VRAM holds all of
+    // a room, the last one still or by now the next
     if (!VramHoldsRamRoom())
       return false;
     own = RamHoldsSeenRoom() ? g_seen_room : dungeon_room_index;
@@ -592,10 +603,15 @@ static int ScrollShift(void) {
 
 void Widescreen_EndFrame(void) {
   const Ppu *ppu = g_zenv.ppu;
-  int mod = main_module_index == 14 ? saved_module_for_menu : main_module_index;
+  g_after_death = g_dying && main_module_index != 18;
+  g_dying = main_module_index == 18;
+  if (g_dying)  // indoors, held below; outdoors, the camera stays put
+    g_death_shift = Widescreen_ViewShift();
+  // under the menus and death, the module they were opened from
+  int mod = main_module_index == 14 || main_module_index == 18 ? saved_module_for_menu : main_module_index;
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || ppu->extraLeftRight == 0 ||
       !(ppu->renderFlags & kPpuRenderFlags_NewRenderer) ||
-      !(mod == 7 || mod == 15 && player_is_indoors)) {
+      !(mod == 7 || (mod == 15 || mod == 17) && player_is_indoors)) {
     g_dungeon_shift = g_dungeon_lo = g_dungeon_hi = 0, g_scrolling = false;
     return;
   }
@@ -605,8 +621,8 @@ void Widescreen_EndFrame(void) {
   int hs = BG2HOFS_copy2, vs = BG2VOFS_copy2;
   RoomView v;
   bool viewed = false;  // a room's picture, with its range
-  if (main_module_index == 15) {
-    // the spotlight closing on the way out: the picture stays where it is
+  if (main_module_index == 15 || main_module_index == 18) {
+    // the spotlight closing on the way out, or dying: the picture stays where it is
   } else if (main_module_index == 14 && submodule_index == 3 && (uint8)(overworld_map_state - 1) < 5) {
     g_dungeon_shift = 0;  // the dungeon's map, from the room faded out to the map faded out
   } else if (scrolling) {
@@ -634,7 +650,18 @@ void Widescreen_Reset(void) {
   g_seen_room = 0xffff;
   g_scrolling = false;
   g_dungeon_shift = g_dungeon_lo = g_dungeon_hi = 0;
+  g_dying = false;
   Widescreen_EndFrame();
+}
+
+bool Widescreen_DeathBackdrop(int *shift) {
+  const Ppu *ppu = g_zenv.ppu;
+  if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || !(g_dying || g_after_death))
+    return false;
+  if ((ppu->screenEnabled[0] | ppu->screenEnabled[1]) & 3)
+    return false;  // BG1 or BG2 on: the picture, drawn as the area or room
+  *shift = g_death_shift;
+  return true;
 }
 
 int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {

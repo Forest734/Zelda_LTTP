@@ -852,7 +852,10 @@ void Death_Func15(bool count_as_death) {  // 89f50f
 }
 
 void GameOver_AnimateChoiceFairy() {  // 89f67a
-  SetOamPlain(&oam_buf[0x14], 0x34, kDeath_SprY0[subsubmodule_index], kDeath_SprChar0[frame_counter >> 3 & 1], 0x78, 2);
+  // [lttp] in widescreen, over where the picture's moved to, to be by the menu, which isn't
+  // (Widescreen_DeathBackdrop)
+  int x = 0x34 + ExtendScreenShift();
+  SetOamPlain(&oam_buf[0x14], x, kDeath_SprY0[subsubmodule_index], kDeath_SprChar0[frame_counter >> 3 & 1], 0x78, 2 | (x >> 8 & 1));
 }
 
 void GameOver_InitializeRevivalFairy() {  // 89f6a4

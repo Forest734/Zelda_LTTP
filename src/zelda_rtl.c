@@ -146,13 +146,26 @@ static void ConfigurePpuSideSpace() {
   int mod = main_module_index;
   if (mod == 14)
     mod = saved_module_for_menu;
-  // [lttp] the spotlight closing or opening outdoors: drawn as there, the picture kept where
-  // it is (its iris goes black past the original's picture anyway)
-  if ((mod == 15 || mod == 16) && !player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
+  // [lttp] dying: drawn as the area or room, the picture kept where it was moved to; once
+  // that's gone, the backdrop fills the sides, and Link, still where he was, and the game
+  // over menu's sprites are drawn as far over as the picture was (upstream: black sides)
+  if (mod == 18 && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
+    mod = saved_module_for_menu;
+  int death_shift;
+  if (Widescreen_DeathBackdrop(&death_shift)) {
+    g_zenv.ppu->viewShift = death_shift;
+    PpuSetExtraSideSpace(g_zenv.ppu, kPpuExtraLeftRight, kPpuExtraLeftRight, 16);
+    return;
+  }
+  // [lttp] the spotlight closing or opening outdoors, or the screen fading out as Link falls
+  // into a hole (module 17): drawn as there, the picture kept where it is (the iris goes
+  // black past the original's picture anyway)
+  if ((mod == 15 || mod == 16 || mod == 17) && !player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
     mod = 9;
-  // [lttp] and closing indoors, on the way out: drawn as the room, the picture kept where
-  // it's moved to (Widescreen_EndFrame)
-  else if (mod == 15 && player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
+  // [lttp] and closing indoors, on the way out, or fading out as a Wallmaster carries Link
+  // off, and in as he lands in the room he's fallen to: drawn as the room, the picture
+  // where it's moved to (Widescreen_EndFrame)
+  else if ((mod == 15 || mod == 17) && player_is_indoors && (enhanced_features0 & kFeatures0_WidescreenVisualFixes))
     mod = 7;
   if (mod == 9) {
     if (main_module_index == 14 && (submodule_index == 7 && overworld_map_state >= 4 ||

@@ -86,6 +86,15 @@ up and down through walls (eight of them in three columns), 83 scrolls; in 15, b
 sides differ, each room's lines kept their own sides and the shift went 4 a frame with no
 clamping; against the build before, its black strip down the whole picture (to 62 wide)
 gone; 4:3 identical.
+Death and falls (below), checked off screen the same day: deaths by the world's left edge
+(Skull Woods, +71) and right (Eastern Palace, −29), and in Tower of Hera (+71) and the Ice
+Palace (−71), with a fairy and without (letters, menu, a choice), at 240 lines too, and
+outdoors where the neighbours are drawn: the picture as the frame before but for sprites,
+and after the revival; letters and the menu's fairy by the menu, nothing moving in the
+frame of the choice. Falls: module 17 set off at Skull Woods (+71, landing at −71) and a
+Wallmaster called in Hera and the Ice Palace: shift held, the new room's before it fades in.
+4:3 identical to the build before (739 shots); a widescreen walk through all 13 reference
+saves identical to it in game RAM (a crc32 of `g_ram` every 20 frames).
 
 ## Frame pacing
 
@@ -177,14 +186,13 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   `PpuWindows_Calc`), and leaves BG3 (HUD, text, menus) where it was. The game's sprite
   checks follow it (`ExtendScreenShift()` beside each `ExtendScreenMargin()`), which is
   needed and not just nicer: OAM's 9-bit x can't tell a sprite 120 left of the 256 from one
-  392 right of it. In module 9, 14 over it, and 15/16 (the spotlight) outdoors; not in mode
-  7 (both maps put the camera at 0); new renderer only; 0 with the camera off the world
-  (through walls). A large area keeps about `(hs & ~15) - 128` to `+ 512` in the tilemap, so
-  up to 20 columns past what upstream draws come from `dung_bg2` (`WorldMap16` while
-  scrolling). Other modules over the overworld (death, falling) drop it, and the picture
-  jumps back as upstream blacks the sides. Things the game clips at the 256 with 8-bit screen
-  x (garnishes, `Ancilla_ReturnIfOutsideBounds`; ancillae hit tiles only within it) do so
-  nearer the middle when it's moved.
+  392 right of it. In module 9, 14 and 18 (death) over it, and 15/16 (the spotlight) and 17
+  (falling into a hole, before the load) outdoors; not in mode 7 (both maps put the camera
+  at 0); new renderer only; 0 with the camera off the world (through walls). A large area
+  keeps about `(hs & ~15) - 128` to `+ 512` in the tilemap, so up to 20 columns past what
+  upstream draws come from `dung_bg2` (`WorldMap16` while scrolling). Things the game clips
+  at the 256 with 8-bit screen x (garnishes, `Ancilla_ReturnIfOutsideBounds`; ancillae hit
+  tiles only within it) do so nearer the middle when it's moved.
 - **The dungeon slide.** Indoors the same `viewShift` keeps the picture inside what's drawn
   round the room: out from the original's picture, up to 142 a side, what's shown of the
   room and the rooms `RoomBesideRoom` it (`MeasureSides`, with a `RoomView`: no tiles
@@ -209,9 +217,23 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   there's little left of the old; with none they both allow (a dark room), as far along as
   the camera is. Black then shows only past the wall of the room coming in or going out,
   in its few lines, for a few frames. Held through the spotlight on the way out
-  (module 15 indoors, now drawn as the room); 0 on the dungeon's map between its blanks
-  (`overworld_map_state` 1 to 5). Other modules (death) drop it, as outdoors.
-  `Widescreen_Reset` after a load or reset.
+  (module 15 indoors, now drawn as the room), and death and falls (below); 0 on the
+  dungeon's map between its blanks (`overworld_map_state` 1 to 5). `Widescreen_Reset`
+  after a load or reset.
+- **Death and falls.** Upstream's widescreen blacked the sides in modules 17 and 18, and
+  the picture jumped back to the middle where it was moved. Now module 18 (death) is drawn
+  as `saved_module_for_menu` (7 or 9), and 17 as 9 outdoors (a hole, before the load) or 7
+  indoors (a Wallmaster, and the landing after the load), with the shift as it was: indoors
+  `Widescreen_EndFrame` holds it in 18 and in 17 takes it from the room VRAM holds (held
+  through the load, the new room's by the fade in). Death's red and black (submodule 4 on,
+  BG1 and BG2 off; `Widescreen_DeathBackdrop`) get the full sides, so the backdrop fills
+  them, and keep the shift, so Link stays where he fell; the game over letters
+  (`GameOverText_Draw`) and the menu's fairy (`GameOver_AnimateChoiceFairy`), at fixed
+  screen x, add `ExtendScreenShift()` to stay by BG3's menu, which doesn't move. The frame
+  in which a choice is made is drawn with the module already 5 (or 0) and the menu still
+  up, so the backdrop and shift are held for one frame after 18 (`g_after_death`). The
+  revival fairy fades the picture back in where it was. The iris is the game's, 8-bit, so
+  it only ever covers the 256 (as the spotlight's).
 
 Also: `MosaicRun` (ppu.c) gives mosaic blocks left of the 256, where upstream read before
 `mosaicModulo` and streaked the extra space in mosaic fades; the flute's map (interface
@@ -220,7 +242,8 @@ submodule 10) gets the world map's extents, where upstream drew it as outdoors.
 Still black (not done): where what's drawn round a dungeon room is narrower than the
 picture (a house or cave quadrant by itself), and briefly past a wall in a vertical
 scroll (above); dark rooms past the original's picture; the dungeon's map at the left (upstream's extents with the camera at 0); the top
-corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge.
+corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge; past
+the 256 as an iris closes or opens (the spotlight, death), the game's window being 8-bit.
 
 Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
 pixels past either side of the 256, 7 short of 16:9's 71, so arrows and the like vanished

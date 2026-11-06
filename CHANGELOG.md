@@ -58,6 +58,13 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   only past the wall of the room coming in or going out, in its few lines, for a few frames. Not in dark rooms, nor where all that's drawn is narrower than the picture (a cave
   by itself). Enemies are kept active as far as it shows, so one now on screen at the far
   side of a room may start moving, or talking, sooner than on the SNES.
+- In widescreen, when Link dies, falls into a hole, or is carried off by a Wallmaster, the
+  space at the sides goes on showing the area or room, where upstream's widescreen blacked
+  it out, and where the camera had stopped at an edge the picture stays where it was
+  instead of jumping back to the middle. Dying, the red, and then the black behind the game
+  over menu, fill the whole screen, Link lying where he fell; with a fairy in a bottle, the
+  picture comes back where it was. Falling, the room he lands in fades in as it'll be once
+  he's there.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini` (SMB's):
   the picture is scaled up by the largest whole number that fits and blended only for the
   rest, so in fullscreen or a resized window every dot is the same size and scrolling

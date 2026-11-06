@@ -5536,9 +5536,12 @@ void GameOverText_Draw() {  // 88f5c4
   oam_ext_cur_ptr = 0xa20;
   OamEnt *oam = GetOamCurPtr();
   int k = flag_for_boomerang_in_place;
+  // [lttp] in widescreen, over where the picture's moved to, to be in the middle as the HUD
+  // and the menu are (Widescreen_DeathBackdrop)
+  int sh = ExtendScreenShift();
   do {
-    Ancilla_SetOam(oam + 0, Ancilla_GetX(k), 0x57, kGameOverText_Chars[k * 2 + 0], 0x3c, 0);
-    Ancilla_SetOam(oam + 1, Ancilla_GetX(k), 0x5f, kGameOverText_Chars[k * 2 + 1], 0x3c, 0);
+    Ancilla_SetOam(oam + 0, Ancilla_GetX(k) + sh, 0x57, kGameOverText_Chars[k * 2 + 0], 0x3c, 0);
+    Ancilla_SetOam(oam + 1, Ancilla_GetX(k) + sh, 0x5f, kGameOverText_Chars[k * 2 + 1], 0x3c, 0);
   } while (oam += 2, --k >= 0);
 }
 
