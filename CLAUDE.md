@@ -100,6 +100,12 @@ reference saves' doors), floors scrolled up and down, closed: the sides all boar
 the fade in, the scrolls and the fade out, at 240 lines too (its last line needed BG row
 241: line y shows row y + 1); the middle 256 identical to the build before and to 4:3, the
 rooms before and after identical to the build before; 4:3 identical to it (117 shots).
+The world map's top corners, checked off screen the same day: both worlds, zoomed in and
+scrolled to each side and up and down, zoomed out, closing; the flute's map (submodule 10
+set from the overworld) choosing and fading out; the attract sequence's map fading in; at
+4x and 1x (`EnhancedMode7 = 0`), at 16:9 and at 18:9 with 240 lines: against the build
+before, every pixel that changed had been black (or at 1x the junk tile), none left at
+the top, the sky seamless across the map's edges; 4:3 identical to it (42 shots).
 
 ## Frame pacing
 
@@ -251,11 +257,25 @@ sides, written into VRAM for the draw as the neighbours are. Upstream's PPU neve
 BG3 past the 256 (the HUD and the menus would repeat, b70aae8); `Ppu.extraBg3` lets it, for
 this only.
 
+The world map's top corners (`WorldMapDrawSides`). Mode 7 is only ever the world map (the
+X button's, the flute's, the attract sequence's, all loaded by `WorldMap_LoadLightWorldMap`):
+512x512, its 64x64 tiles at the top left of mode 7's 128x128 tilemap, the rest filled with
+tile 0xef, junk. Tilted, the top lines span more of the map (matrix A up to 375/256 zoomed
+out, `kMapMode_Zooms1`), never past its sides at 4:3 but up to 37 past at 16:9 (94 at 18:9
+with 240 lines), and upstream's 4x renderer drew black from x 512 on and left of 0 (bit 31
+of its `xcur`); its 1x one the junk, and black left of 0. The map's sky is drawn to go on
+across its edges, the left side to the right, so for the draw columns 64 to 127 of rows 0
+to 63 get the map again, and M7SEL wraps (`Ppu.m7largeField` false; the game never writes
+M7SEL, and upstream's PPU starts with it set), which the 4x renderer now honours: the map
+repeats every 512. Rows past 63 aren't reached (the top line's at y 48 or more).
+
 Still black (not done): where what's drawn round a dungeon room is narrower than the
 picture (a house or cave quadrant by itself), and briefly past a wall in a vertical
-scroll (above); dark rooms past the original's picture; the top
-corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge; past
-the 256 as an iris closes or opens (the spotlight, death), the game's window being 8-bit.
+scroll (above); dark rooms past the original's picture; with 240 lines, the 16 past the
+world's bottom edge; past the 256 as an iris closes or opens (the spotlight, death), the
+game's window being 8-bit. And at 18:9 with 240 lines, everywhere, the 32 at the right:
+that asks for 112 a side, which upstream's PPU caps at 96 (`kPpuExtraLeftRight`), so it
+draws 448 of the 480.
 
 Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
 pixels past either side of the 256, 7 short of 16:9's 71, so arrows and the like vanished

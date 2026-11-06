@@ -755,6 +755,8 @@ static void PpuDrawMode7Upsampled(Ppu *ppu, uint y) {
   uint8 *dst_curline = dst_start;
   uint32 m1 = ppu->m7matrix[1] << 12;  // xpos increment per vert movement
   uint32 m2 = ppu->m7matrix[2] << 12;  // ypos increment per horiz movement
+  // [lttp] past x 512 (and left of 0) the backdrop, unless M7SEL wraps (upstream: always)
+  uint32 clip_x = ppu->m7largeField ? 0x80000000 : 0;
   for (int j = 0; j < 4; j++) {
     uint32 m0 = m0v[j], m3 = m0;
     uint32 xpos = m0 * clippedH + m1 * (clippedV + y) + (xCenter << 20), xcur;
@@ -775,7 +777,7 @@ static void PpuDrawMode7Upsampled(Ppu *ppu, uint y) {
 #define DRAW_PIXEL(mode) \
     tile = ppu->vram[(ycur >> 25 & 0x7f) * 128 + (xcur >> 25 & 0x7f)] & 0xff;  \
     pixel = ppu->vram[tile * 64 + (ycur >> 22 & 7) * 8 + (xcur >> 22 & 7)] >> 8; \
-    pixel = (xcur & 0x80000000) ? 0 : pixel; \
+    pixel = (xcur & clip_x) ? 0 : pixel; /* [lttp] upstream: 0x80000000 */ \
     *(uint32*)dst = (mode ? (ppu->colorMapRgb[pixel] & 0xfefefe) >> 1 : ppu->colorMapRgb[pixel]); \
     xcur += m0, ycur += m2, dst += 4;
 

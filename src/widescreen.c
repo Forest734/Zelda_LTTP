@@ -42,6 +42,10 @@
 //
 // The dungeon's map is a wooden board with two frames on it: the board goes on across the
 // sides.
+//
+// The world map, tilted, shows more of the map in its top lines than its bottom ones, and
+// at the top corners, wider than 4:3, goes past the map's sides: the sky round it goes on,
+// as it's drawn to.
 #include "zelda_rtl.h"
 #include "variables.h"
 #include "overworld.h"
@@ -49,9 +53,11 @@
 #include "widescreen.h"
 #include "snes/ppu.h"
 
-// What's written into VRAM for a frame, to put back once it's drawn.
+// What's written into VRAM for a frame, to put back once it's drawn, and M7SEL's wrap bit
+// (Ppu.m7largeField: not wrapping) if changed.
 static uint16 g_saved_adr[8192], g_saved_val[8192];
 static int g_saved_count;
+static bool g_saved_m7_wrap, g_saved_m7_large_field;
 
 // Indoors, how far the picture's moved right (Widescreen_ViewShift), as worked out at the
 // end of the last frame; 0 elsewhere. And how far it could have been, lo to hi, and shown
@@ -782,17 +788,43 @@ static void DungeonMapDrawSides(void) {
   }
 }
 
+// ---- The world map ----
+
+// Mode 7 is only ever the world map (the X button's, the flute's, the attract sequence's):
+// 512x512, its 64x64 tiles at the top left of mode 7's 128x128 tilemap, the rest of which
+// the game fills with tile 0xef, junk (WorldMap_FillTilemapWithEF). Tilted, its top lines
+// span more of the map than its bottom ones, never past its sides at 4:3, but up to 37
+// past them at 16:9 (black: upstream's 4x renderer leaves out x 512 on, and its other one
+// draws the junk there and black left of 0). The sky round the map is drawn to go on
+// across its edges, the map's left side to its right, so it does: for the draw, the
+// tilemap's columns past it hold the map again, and M7SEL wraps (bit 7 clear: the game
+// never writes M7SEL, and upstream's PPU starts with it set), so the map repeats every 512
+// pixels.
+static void WorldMapDrawSides(void) {
+  Ppu *ppu = g_zenv.ppu;
+  for (int ty = 0; ty < 64; ty++) {
+    for (int tx = 0; tx < 64; tx++) {
+      uint16 adr = ty * 128 + tx;  // the tilemap's the low bytes, the tiles' pixels the high
+      WriteTile(adr + 64, (ppu->vram[adr + 64] & 0xff00) | (ppu->vram[adr] & 0xff));
+    }
+  }
+  g_saved_m7_wrap = true, g_saved_m7_large_field = ppu->m7largeField;
+  ppu->m7largeField = false;
+}
+
 // ---- Around the PPU's drawing of a frame ----
 
 void Widescreen_DrawNeighbors(void) {
   g_saved_count = 0;
+  bool fixes = (enhanced_features0 & kFeatures0_WidescreenVisualFixes) && g_zenv.ppu->extraLeftRight != 0;
   if (Widescreen_OverworldShowsNeighbors())
     OverworldDrawNeighbors();
   else if (g_dungeon_drawn)
     DungeonDrawNeighbors();
-  else if (DungeonMapUp() && (enhanced_features0 & kFeatures0_WidescreenVisualFixes) &&
-           g_zenv.ppu->extraLeftRight != 0)
+  else if (DungeonMapUp() && fixes)
     DungeonMapDrawSides();
+  else if (g_zenv.ppu->mode == 7 && fixes)
+    WorldMapDrawSides();
   g_dungeon_drawn = false;  // until Widescreen_DungeonSideSpace says so again
 }
 
@@ -801,4 +833,6 @@ void Widescreen_Restore(void) {
     g_saved_count--;
     g_zenv.ppu->vram[g_saved_adr[g_saved_count]] = g_saved_val[g_saved_count];
   }
+  if (g_saved_m7_wrap)
+    g_zenv.ppu->m7largeField = g_saved_m7_large_field, g_saved_m7_wrap = false;
 }

@@ -22,6 +22,9 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   now go on out of the picture, and enemies come and go a little further out of sight.
 - In widescreen, the flute's map of where the bird can go was black at the left (upstream drew
   it as the overworld); it's now drawn across the picture, as the world map is.
+- In widescreen, the world map (and the flute's, and the one in the story told before the
+  title screen) had black corners at the top, where its tilt shows more than the map: the
+  sky round it now goes on there, as it does across the map's own edges.
 - In widescreen, a mosaic (going into the woods, say) drew streaks over the space at the left,
   where it read the size of its blocks from outside its table. It now goes on into it.
 - A gamepad with SNES-style buttons, such as the iBuffalo SNES Controller, had A and B, and X
