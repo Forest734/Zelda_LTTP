@@ -237,8 +237,9 @@ void ZeldaDrawPpuFrame(uint8 *pixel_buffer, size_t pitch, uint32 render_flags) {
       PpuSetMode7PerspectiveCorrection(g_zenv.ppu, 0, 0);
   }
 
-  // [lttp] unless ConfigurePpuSideSpace moves the picture, or gives lines their own sides
-  g_zenv.ppu->viewShift = 0, g_zenv.ppu->extraPerLine = false;
+  // [lttp] unless ConfigurePpuSideSpace moves the picture, gives lines their own sides, or
+  // BG3 the sides too
+  g_zenv.ppu->viewShift = 0, g_zenv.ppu->extraPerLine = false, g_zenv.ppu->extraBg3 = false;
   if (g_zenv.ppu->extraLeftRight != 0 || render_flags & kPpuRenderFlags_Height240)
     ConfigurePpuSideSpace();
   Widescreen_DrawNeighbors();  // [lttp]

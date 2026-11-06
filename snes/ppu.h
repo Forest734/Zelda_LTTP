@@ -62,6 +62,9 @@ struct Ppu {
   // where the rooms above and below differ. Only the new renderer.
   bool extraPerLine;
   uint8_t extraLeftLine[240], extraRightLine[240];
+  // [lttp] BG3 drawn at the sides too, where upstream keeps it to the 256 (the HUD and the
+  // menus): widescreen, on the dungeon's map, whose board BG3 is. Only the new renderer.
+  bool extraBg3;
   float mode7PerspectiveLow, mode7PerspectiveHigh;
 
   // TMW / TSW etc

@@ -39,6 +39,9 @@
 // at the end of each frame, drawn or not (Widescreen_EndFrame). The space at the sides is
 // worked out line by line, so a room above or below that has less drawn at a side doesn't
 // cut this one's short.
+//
+// The dungeon's map is a wooden board with two frames on it: the board goes on across the
+// sides.
 #include "zelda_rtl.h"
 #include "variables.h"
 #include "overworld.h"
@@ -75,6 +78,12 @@ static uint16 TilemapAdr(uint16 base, int tx, int ty) {
 
 static bool TilemapIs64x64(const BgLayer *bg) {
   return bg->tilemapWider && bg->tilemapHigher;
+}
+
+// The dungeon's map, from the room faded out to the map faded out (overworld_map_state 1 to
+// 5): VRAM holds the map, BG3 its wooden board and frames, with no scroll.
+static bool DungeonMapUp(void) {
+  return main_module_index == 14 && submodule_index == 3 && (uint8)(overworld_map_state - 1) < 5;
 }
 
 // A 10-bit scroll register's distance from where the game's camera is.
@@ -623,8 +632,8 @@ void Widescreen_EndFrame(void) {
   bool viewed = false;  // a room's picture, with its range
   if (main_module_index == 15 || main_module_index == 18) {
     // the spotlight closing on the way out, or dying: the picture stays where it is
-  } else if (main_module_index == 14 && submodule_index == 3 && (uint8)(overworld_map_state - 1) < 5) {
-    g_dungeon_shift = 0;  // the dungeon's map, from the room faded out to the map faded out
+  } else if (DungeonMapUp()) {
+    g_dungeon_shift = 0;
   } else if (scrolling) {
     g_dungeon_shift = ScrollShift();
   } else if (main_module_index == 14 || DungeonInRoom()) {
@@ -671,6 +680,12 @@ int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
     return 0;
   Ppu *ppu = g_zenv.ppu;
   int extra = ppu->extraLeftRight, hs, vs;
+  if (DungeonMapUp() && extra != 0) {
+    // the dungeon's map: its board goes on across the sides (DungeonMapDrawSides)
+    *left = *right = extra, *bottom = 16;
+    ppu->extraBg3 = true;
+    return 0;
+  }
   DungeonViewOrigin(&hs, &vs);
   if (!g_dungeon_drawn) {
     // upstream's extents (by the whole room's camera bounds), kept to the room the camera's
@@ -747,6 +762,26 @@ static void DungeonDrawNeighbors(void) {
   }
 }
 
+// The dungeon's map is a 256x224 wooden board (BG3, a 32x32 screen of it) with the floors'
+// frame and the map's on it; past its sides BG3 is blank. The board goes on: each row's tile
+// at the edge, plain wood, repeated out to the picture's sides.
+static void DungeonMapDrawSides(void) {
+  Ppu *ppu = g_zenv.ppu;
+  const BgLayer *bg3 = &ppu->bgLayer[2];
+  if (bg3->hScroll != 0 || bg3->vScroll != 0)
+    return;
+  int tx0 = -((ppu->extraLeftCur + 7) >> 3), tx1 = 32 + ((ppu->extraRightCur + 7) >> 3);
+  int ty1 = ((224 + ppu->extraBottomCur) >> 3) + 1;  // line y shows BG row y + 1, as on the SNES
+  for (int ty = 0; ty < ty1; ty++) {
+    uint16 left = ppu->vram[TilemapAdr(bg3->tilemapAdr, 0, ty)];
+    uint16 right = ppu->vram[TilemapAdr(bg3->tilemapAdr, 31, ty)];
+    for (int tx = tx0; tx < 0; tx++)
+      WriteTile(TilemapAdr(bg3->tilemapAdr, tx, ty), left);
+    for (int tx = 32; tx < tx1; tx++)
+      WriteTile(TilemapAdr(bg3->tilemapAdr, tx, ty), right);
+  }
+}
+
 // ---- Around the PPU's drawing of a frame ----
 
 void Widescreen_DrawNeighbors(void) {
@@ -755,6 +790,9 @@ void Widescreen_DrawNeighbors(void) {
     OverworldDrawNeighbors();
   else if (g_dungeon_drawn)
     DungeonDrawNeighbors();
+  else if (DungeonMapUp() && (enhanced_features0 & kFeatures0_WidescreenVisualFixes) &&
+           g_zenv.ppu->extraLeftRight != 0)
+    DungeonMapDrawSides();
   g_dungeon_drawn = false;  // until Widescreen_DungeonSideSpace says so again
 }
 

@@ -95,6 +95,11 @@ frame of the choice. Falls: module 17 set off at Skull Woods (+71, landing at âˆ
 Wallmaster called in Hera and the Ice Palace: shift held, the new room's before it fades in.
 4:3 identical to the build before (739 shots); a widescreen walk through all 13 reference
 saves identical to it in game RAM (a crc32 of `g_ram` every 20 frames).
+The dungeon's map (below), checked off screen 2026-11-06: opened in nine dungeons (the
+reference saves' doors), floors scrolled up and down, closed: the sides all board through
+the fade in, the scrolls and the fade out, at 240 lines too (its last line needed BG row
+241: line y shows row y + 1); the middle 256 identical to the build before and to 4:3, the
+rooms before and after identical to the build before; 4:3 identical to it (117 shots).
 
 ## Frame pacing
 
@@ -237,11 +242,18 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
 
 Also: `MosaicRun` (ppu.c) gives mosaic blocks left of the 256, where upstream read before
 `mosaicModulo` and streaked the extra space in mosaic fades; the flute's map (interface
-submodule 10) gets the world map's extents, where upstream drew it as outdoors.
+submodule 10) gets the world map's extents, where upstream drew it as outdoors. The
+dungeon's map (submodule 3, `overworld_map_state` 1 to 5) gets all of the sides, where
+upstream gave it a room's extents with the camera at 0 (black), and its wooden board goes
+on across them (`DungeonMapDrawSides`): the board is BG3, a 32x32 screen of it with the
+frames on, blank past it, and each row's edge tile, plain wood, is repeated out to the
+sides, written into VRAM for the draw as the neighbours are. Upstream's PPU never draws
+BG3 past the 256 (the HUD and the menus would repeat, b70aae8); `Ppu.extraBg3` lets it, for
+this only.
 
 Still black (not done): where what's drawn round a dungeon room is narrower than the
 picture (a house or cave quadrant by itself), and briefly past a wall in a vertical
-scroll (above); dark rooms past the original's picture; the dungeon's map at the left (upstream's extents with the camera at 0); the top
+scroll (above); dark rooms past the original's picture; the top
 corners of the tilted world map; with 240 lines, the 16 past the world's bottom edge; past
 the 256 as an iris closes or opens (the spotlight, death), the game's window being 8-bit.
 

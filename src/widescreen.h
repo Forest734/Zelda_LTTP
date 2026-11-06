@@ -20,7 +20,8 @@ void Widescreen_Reset(void);
 // as far as they're drawn (if they aren't, upstream's extents, kept to the room the
 // camera's in), from where it's moved to, and how far that is (Ppu.viewShift). Where it
 // goes on less in some lines than others (rooms above and below whose sides differ), the
-// most of any, and each line's own in Ppu.extraLeftLine and extraRightLine.
+// most of any, and each line's own in Ppu.extraLeftLine and extraRightLine. On the
+// dungeon's map, all of the sides, where its board goes on.
 int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom);
 // Dying, once BG1 and BG2 are off (the red, then black, behind Link, the HUD and the game
 // over menu), and in the frame after, in which a choice made on the menu is still shown:

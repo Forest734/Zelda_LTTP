@@ -216,8 +216,9 @@ typedef struct PpuWindows {
 } PpuWindows;
 
 static void PpuWindows_Clear(PpuWindows *win, Ppu *ppu, uint layer) {
-  win->edges[0] = -(layer != 2 ? ppu->extraLeftCur : 0);
-  win->edges[1] = 256 + (layer != 2 ? ppu->extraRightCur : 0);
+  // [lttp] and BG3's too, with extraBg3
+  win->edges[0] = -(layer != 2 || ppu->extraBg3 ? ppu->extraLeftCur : 0);
+  win->edges[1] = 256 + (layer != 2 || ppu->extraBg3 ? ppu->extraRightCur : 0);
   win->nr = 1;
   win->bits = 0;
 }
@@ -228,8 +229,9 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   // Algorithm from Snes9x
   uint32 winflags = GET_WINDOW_FLAGS(ppu, layer);
   uint nr = 1;
-  int window_right = 256 + (layer != 2 ? ppu->extraRightCur : 0);
-  win->edges[0] = - (layer != 2 ? ppu->extraLeftCur : 0);
+  // [lttp] and BG3's too, with extraBg3
+  int window_right = 256 + (layer != 2 || ppu->extraBg3 ? ppu->extraRightCur : 0);
+  win->edges[0] = - (layer != 2 || ppu->extraBg3 ? ppu->extraLeftCur : 0);
   win->edges[1] = window_right;
   uint i, j;
   int t;

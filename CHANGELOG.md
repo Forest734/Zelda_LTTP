@@ -65,6 +65,8 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   over menu, fill the whole screen, Link lying where he fell; with a fairy in a bottle, the
   picture comes back where it was. Falling, the room he lands in fades in as it'll be once
   he's there.
+- In widescreen, the dungeon's map fills the screen: the wooden board its two frames sit on
+  goes on across the sides, where upstream's widescreen showed black.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini` (SMB's):
   the picture is scaled up by the largest whole number that fits and blended only for the
   rest, so in fullscreen or a resized window every dot is the same size and scrolling
