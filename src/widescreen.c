@@ -42,10 +42,11 @@
 //
 // Houses and caves are put several to a room, one a quadrant, so of the room only the
 // quadrant the camera's kept to is drawn (the room's layout keeps it to one only where
-// nothing joins it to the next). Past that, and past the rooms next door through a door,
-// what's round a house or cave everywhere in the room goes on to the picture's edges,
-// where there was black; but not the sprites, which past the quadrant can be another
-// house's.
+// nothing joins it to the next), and scrolling over to the next room, only that of the
+// room it's leaving and of the one it's going to. Past that, and past the rooms next door
+// through a door, what's round a house or cave everywhere in the room goes on to the
+// picture's edges, where there was black; but not the sprites, which past the quadrant can
+// be another house's.
 //
 // The dungeon's map is a wooden board with two frames on it: the board goes on across the
 // sides.
@@ -197,7 +198,8 @@ static void OverworldDrawNeighbors(void) {
   bool area_in_ram = main_module_index == 14 || submodule_index == 0;
 
   int tx0 = IntMax(view - extra, 0) >> 3, tx1 = IntMin(view + 256 + extra + 7, kWorldSize) >> 3;
-  int ty0 = IntMax(vs, 0) >> 3, ty1 = IntMin(vs + 240 + 7, kWorldSize) >> 3;  // 240: extend_y
+  // to line 239 (extend_y), which shows row vs + 240: the SNES draws line y from row y + 1
+  int ty0 = IntMax(vs, 0) >> 3, ty1 = IntMin(vs + 240 + 8, kWorldSize) >> 3;
   for (int tx = tx0; tx < tx1; tx++) {
     int x = tx * 8;
     // past what upstream draws, in a large area
@@ -241,29 +243,43 @@ typedef struct RoomView {
   int x0, x1, y0, y1;
 } RoomView;
 
-// This frame's: whether the rooms next door are drawn, the room whose own tiles are all in
-// VRAM (-1 while scrolling over to the next, when it's some of each) and how much of it is
-// shown (none while scrolling), and the room they're to look like; and whether what's left
-// black is filled in with what's round the room (houses and caves).
-static bool g_dungeon_drawn, g_fill;
-static int g_own_room, g_like_room;
-static RoomView g_own;
+// What was shown of the room last seen, while Link was in it (room -1 if not known).
+static RoomView g_seen_view = { -1 };
 
 // What's round a house or cave where nothing's drawn, by where a tile is in the floor's
 // pattern (4 wide, 2 high), BG2's then BG1's: what's mostly at that place in it round the
 // edge of the room (in all of them, BG2's tile 0x3c15 and BG1's floor).
-static uint16 g_surround[2][8];
-static int g_surround_room = -1;
+typedef struct Surround {
+  int room;
+  uint16 tile[2][8];
+} Surround;
+
+// This frame's: whether the rooms next door are drawn, the room whose own tiles are all in
+// VRAM (-1 while scrolling over to the next, when it's some of each) and the room they're
+// to look like; what's shown of the rooms the picture's of, where that's not all of them
+// (the camera's, but none while scrolling in a palace; scrolling in a house or cave, the
+// room it's leaving and the one it's going to); and, in houses and caves, what's round the
+// room, which fills in what would be black (the one it's going to has its own).
+static bool g_dungeon_drawn, g_fill;
+static int g_own_room, g_like_room;
+static RoomView g_shown[2];
+static int g_num_shown;
+static const Surround *g_like_surround, *g_next_surround;
+
+static Surround g_surrounds[2] = { { -1 }, { -1 } };  // the last two rooms'
+static int g_surround_last;  // the one last looked up
 
 static int SurroundPhase(int tx, int ty) {
   return (ty & 1) * 4 + (tx & 3);
 }
 
-// Works out g_surround for a room from its tiles, BG2's then BG1's.
-static void FindSurround(int room, const uint16 *bg) {
-  if (room == g_surround_room)
-    return;
-  g_surround_room = room;
+// What's round a room, from its tiles, BG2's then BG1's.
+static const Surround *FindSurround(int room, const uint16 *bg) {
+  for (int i = 0; i < 2; i++)
+    if (g_surrounds[i].room == room)
+      return &g_surrounds[g_surround_last = i];
+  Surround *sur = &g_surrounds[g_surround_last ^= 1];  // not the other one, still in use
+  sur->room = room;
   uint32 pair[8][64];
   int count[8][64], n[8] = { 0 };
   for (int i = 0; i < 4 * 64; i++) {
@@ -283,8 +299,17 @@ static void FindSurround(int room, const uint16 *bg) {
     for (int c = 1; c < n[ph]; c++)
       if (count[ph][c] > count[ph][best])
         best = c;
-    g_surround[0][ph] = pair[ph][best], g_surround[1][ph] = pair[ph][best] >> 16;
+    sur->tile[0][ph] = pair[ph][best], sur->tile[1][ph] = pair[ph][best] >> 16;
   }
+  return sur;
+}
+
+// The part of the room that's shown, of parts (n of them), or NULL if all of it.
+static const RoomView *ShownPart(const RoomView *parts, int n, int room) {
+  for (int i = 0; i < n; i++)
+    if (parts[i].room == room)
+      return &parts[i];
+  return NULL;
 }
 
 static const uint16 kInVram[1];  // RoomTiles: the game's own tiles are in VRAM
@@ -404,6 +429,8 @@ static const uint16 *RoomTiles(int room) {
 }
 
 static void SeeRoom(int room) {
+  if (room != g_seen_room)
+    g_seen_view.room = -1;
   g_seen_room = room;
   memcpy(g_seen_bg, dung_bg2, kRoomTiles * sizeof(uint16));
   memcpy(g_seen_bg + kRoomTiles, dung_bg1, kRoomTiles * sizeof(uint16));
@@ -474,8 +501,10 @@ static bool GetRoomView(int room, int hs, int vs, RoomView *v) {
   return true;
 }
 
-// Works out this frame's g_own_room, g_own and g_like_room: false if the rooms next door
-// aren't drawn.
+static bool ScrollEndView(RoomView *v);
+
+// Works out this frame's g_own_room, g_like_room, g_shown and what's round the room: false
+// if the rooms next door aren't drawn.
 static bool DungeonFrameSetup(void) {
   const Ppu *ppu = g_zenv.ppu;
   if (!(enhanced_features0 & kFeatures0_WidescreenVisualFixes) || ppu->extraLeftRight == 0)
@@ -491,8 +520,6 @@ static bool DungeonFrameSetup(void) {
       return false;  // not indoors, or the dungeon's map
     own = g_seen_room;
   } else if (main_module_index == 7 && submodule_index == 2) {
-    if (cur_palace_index_x2 == 0xff)
-      return false;  // in a cave the tilemaps can hold other caves (below)
     own = -1;
   } else if (DungeonInRoom()) {
     own = dungeon_room_index;
@@ -508,14 +535,22 @@ static bool DungeonFrameSetup(void) {
   } else {
     return false;
   }
-  memset(&g_own, 0, sizeof(g_own));
+  g_num_shown = 0;
   if (own >= 0) {
     int hs, vs;
     DungeonViewOrigin(&hs, &vs);
-    if (!GetRoomView(own, hs, vs, &g_own))
+    if (!GetRoomView(own, hs, vs, &g_shown[0]))
       return false;  // the camera's elsewhere
     if (own != g_seen_room)
       SeeRoom(own);
+    g_seen_view = g_shown[0], g_num_shown = 1;
+  } else if (cur_palace_index_x2 == 0xff) {
+    // scrolling over to the next room in a house or cave: the tilemaps can hold other houses
+    // or caves, put in the same rooms, so of the room it's leaving only what was shown, and
+    // of the one it's going to what will be
+    if (g_seen_view.room != g_seen_room || !ScrollEndView(&g_shown[1]))
+      return false;
+    g_shown[0] = g_seen_view, g_num_shown = 2;
   }
   if (g_seen_room == 0xffff)
     return false;
@@ -524,8 +559,13 @@ static bool DungeonFrameSetup(void) {
   // (A dark room's darkness falls on the rooms next door too, as on the original's picture.)
   g_own_room = own, g_like_room = own >= 0 ? own : g_seen_room;
   g_fill = cur_palace_index_x2 == 0xff;
-  if (g_fill)
-    FindSurround(g_seen_room, g_seen_bg);  // g_like_room's
+  g_like_surround = g_next_surround = NULL;
+  if (g_fill) {
+    g_like_surround = FindSurround(g_seen_room, g_seen_bg);  // g_like_room's
+    const uint16 *next = own < 0 ? RoomTiles(dungeon_room_index) : NULL;
+    if (next)
+      g_next_surround = FindSurround(dungeon_room_index, next);
+  }
   return true;
 }
 
@@ -533,23 +573,16 @@ static bool DungeonFrameSetup(void) {
 // tiles are if v is NULL, else as they'd be with the picture of v's room (what's shown of
 // it, and the rooms drawn beside it), nothing built.
 static bool RoomsDrawn(const RoomView *v, int x0, int x1, int y0, int y1) {
-  const RoomView *own = v ? v : &g_own;
+  const RoomView *parts = v ? v : g_shown;
+  int num_parts = v ? 1 : g_num_shown;
   for (int y = y0 & ~511; y < y1; y += 512) {
     for (int x = x0 & ~511; x < x1; x += 512) {
       int room = RoomAt(x, y);
-      bool is_own;
-      if (v) {
-        if (room < 0 || room != v->room && !RoomBesideRoom(v->room, room))
-          return false;
-        is_own = room == v->room;
-      } else {
-        const uint16 *bg = RoomTiles(room);
-        if (!bg)
-          return false;
-        is_own = bg == kInVram;
-      }
-      if (is_own && (IntMax(x0, x) < own->x0 || IntMin(x1, x + 512) > own->x1 ||
-                     IntMax(y0, y) < own->y0 || IntMin(y1, y + 512) > own->y1))
+      if (v ? room < 0 || room != v->room && !RoomBesideRoom(v->room, room) : !RoomTiles(room))
+        return false;
+      const RoomView *p = ShownPart(parts, num_parts, room);
+      if (p && (IntMax(x0, x) < p->x0 || IntMin(x1, x + 512) > p->x1 ||
+                IntMax(y0, y) < p->y0 || IntMin(y1, y + 512) > p->y1))
         return false;  // past what's shown of it
     }
   }
@@ -557,22 +590,28 @@ static bool RoomsDrawn(const RoomView *v, int x0, int x1, int y0, int y1) {
 }
 
 // The nearest place below x (above it, for EdgeAbove) where what's drawn can change: the
-// edge of a room, or of what's shown of the camera's, lo to hi.
-static int EdgeBelow(int x, int lo, int hi) {
+// edge of a room, or of what's shown of one (parts, n of them), across or (down) up and down.
+static int EdgeBelow(int x, const RoomView *parts, int n, bool down) {
   int e = (x - 1) & ~511;
-  if (lo < x && lo > e)
-    e = lo;
-  if (hi < x && hi > e)
-    e = hi;
+  for (int i = 0; i < n; i++) {
+    int lo = down ? parts[i].y0 : parts[i].x0, hi = down ? parts[i].y1 : parts[i].x1;
+    if (lo < x && lo > e)
+      e = lo;
+    if (hi < x && hi > e)
+      e = hi;
+  }
   return e;
 }
 
-static int EdgeAbove(int x, int lo, int hi) {
+static int EdgeAbove(int x, const RoomView *parts, int n, bool down) {
   int e = (x & ~511) + 512;
-  if (lo > x && lo < e)
-    e = lo;
-  if (hi > x && hi < e)
-    e = hi;
+  for (int i = 0; i < n; i++) {
+    int lo = down ? parts[i].y0 : parts[i].x0, hi = down ? parts[i].y1 : parts[i].x1;
+    if (lo > x && lo < e)
+      e = lo;
+    if (hi > x && hi < e)
+      e = hi;
+  }
   return e;
 }
 
@@ -580,16 +619,17 @@ static int EdgeAbove(int x, int lo, int hi) {
 // drawn goes on in the lines of the dungeon from y0 to y1, up to limit: out from it, room by
 // room, as RoomsDrawn has it.
 static void MeasureSides(const RoomView *v, int hs, int y0, int y1, int limit, int *left, int *right) {
-  const RoomView *own = v ? v : &g_own;
+  const RoomView *parts = v ? v : g_shown;
+  int num_parts = v ? 1 : g_num_shown;
   int l = 0, r = 0;
   while (l < limit) {
-    int x1 = hs - l, x0 = IntMax(EdgeBelow(x1, own->x0, own->x1), hs - limit);
+    int x1 = hs - l, x0 = IntMax(EdgeBelow(x1, parts, num_parts, false), hs - limit);
     if (!RoomsDrawn(v, x0, x1, y0, y1))
       break;
     l = hs - x0;
   }
   while (r < limit) {
-    int x0 = hs + 256 + r, x1 = IntMin(EdgeAbove(x0, own->x0, own->x1), hs + 256 + limit);
+    int x0 = hs + 256 + r, x1 = IntMin(EdgeAbove(x0, parts, num_parts, false), hs + 256 + limit);
     if (!RoomsDrawn(v, x0, x1, y0, y1))
       break;
     r = x1 - hs - 256;
@@ -627,6 +667,22 @@ static int RangeShift(int lo, int hi) {
 static bool g_scrolling;
 static int g_scroll_dir, g_scroll_shift0, g_scroll_lo0, g_scroll_hi0, g_scroll_cam0, g_scroll_cam1;
 
+// Where the camera will be once it's scrolled over (ScrollShift has begun).
+static void ScrollEndCamera(int *hs, int *vs) {
+  bool across = g_scroll_dir >= 2;
+  *hs = across ? g_scroll_cam1 : BG2HOFS_copy2, *vs = across ? BG2VOFS_copy2 : g_scroll_cam1;
+}
+
+// What will be shown of the room it's scrolling over to, once there: false if it's not
+// scrolling (as far as ScrollShift knows), or the camera won't be in it.
+static bool ScrollEndView(RoomView *v) {
+  int hs, vs;
+  if (!g_scrolling)
+    return false;
+  ScrollEndCamera(&hs, &vs);
+  return GetRoomView(dungeon_room_index, hs, vs, v);
+}
+
 static int ScrollShift(void) {
   if (!g_scrolling) {  // as it begins (the game clears the direction before it's over)
     int dir = overworld_screen_transition & 3;  // down, up, right, left
@@ -639,8 +695,8 @@ static int ScrollShift(void) {
     g_scroll_cam0 = cam, g_scroll_cam1 = dir & 1 ? cam - d : cam + d;
   }
   bool across = g_scroll_dir >= 2;
-  int cam = across ? BG2HOFS_copy2 : BG2VOFS_copy2, cam1 = g_scroll_cam1;
-  int hs = across ? cam1 : BG2HOFS_copy2, vs = across ? BG2VOFS_copy2 : cam1;
+  int cam = across ? BG2HOFS_copy2 : BG2VOFS_copy2, cam1 = g_scroll_cam1, hs, vs;
+  ScrollEndCamera(&hs, &vs);
   RoomView v;
   int lo1 = 0, hi1 = 0;
   if (GetRoomView(dungeon_room_index, hs, vs, &v))
@@ -695,6 +751,8 @@ void Widescreen_EndFrame(void) {
     if (main_module_index == 7)
       SeeRoom(dungeon_room_index);  // as drawn or not (DungeonFrameSetup)
     viewed = GetRoomView(dungeon_room_index, hs, vs, &v);
+    if (viewed && v.room == g_seen_room)
+      g_seen_view = v;
   } else if (VramHoldsRamRoom()) {
     // on the way to another room (stairs, a fall, a warp): the room whose picture VRAM
     // holds, the last one still or by now the next (DungeonFrameSetup)
@@ -711,8 +769,8 @@ void Widescreen_EndFrame(void) {
 }
 
 void Widescreen_Reset(void) {
-  g_seen_room = 0xffff;
-  g_surround_room = -1;
+  g_seen_room = 0xffff, g_seen_view.room = -1;
+  g_surrounds[0].room = g_surrounds[1].room = -1;
   g_scrolling = false;
   g_dungeon_shift = g_dungeon_lo = g_dungeon_hi = 0;
   g_dying = false;
@@ -758,23 +816,28 @@ int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
     return s;
   }
   // What's drawn past the sides, in bands down the picture split where it can change: at
-  // the edges of rooms, and of what's shown of the camera's; and at the bottom of the
+  // the edges of rooms, and of what's shown of them; and at the bottom of the
   // original's 224, on past which (with extend_y) a band is shown only while all of the 256
   // is drawn.
   enum { kMaxBands = 8 };
   int band_y[kMaxBands + 1], band_l[kMaxBands], band_r[kMaxBands], n = 0;
   int least_l = 2 * extra, least_r = 2 * extra;  // of any band in the 224
   for (int y = vs; y < vs + 240 && n < kMaxBands; n++) {
-    int y1 = IntMin(EdgeAbove(y, g_own.y0, g_own.y1), y < vs + 224 ? vs + 224 : vs + 240);
+    int y1 = IntMin(EdgeAbove(y, g_shown, g_num_shown, true), y < vs + 224 ? vs + 224 : vs + 240);
     MeasureSides(NULL, hs, y, y1, 2 * extra, &band_l[n], &band_r[n]);
     if (y < vs + 224)
       least_l = IntMin(least_l, band_l[n]), least_r = IntMin(least_r, band_r[n]);
     band_y[n] = y, band_y[n + 1] = y = y1;
   }
   // the picture moved (Widescreen_EndFrame), but not so far that any of the 256 isn't drawn
-  int s = IntMin(IntMax(g_dungeon_shift, -least_l), least_r);
+  // (in a house or cave it all is, what's round it filling in the rest)
+  int s = g_fill ? g_dungeon_shift : IntMin(IntMax(g_dungeon_shift, -least_l), least_r);
   int most_l = 0, most_r = 0, b = 0;
   bool differ = false;
+  if (g_fill) {
+    memset(ppu->objLeftLine, 0, sizeof(ppu->objLeftLine));
+    memset(ppu->objRightLine, 0, sizeof(ppu->objRightLine));
+  }
   for (int i = 0; i < n; i++) {
     int y0 = band_y[i], y1 = band_y[i + 1];
     if (y0 >= vs + 224) {
@@ -784,6 +847,14 @@ int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
       b = y1 - vs - 224;
     }
     int l = IntMin(band_l[i] + s, extra), r = IntMin(band_r[i] - s, extra);
+    if (g_fill) {
+      // A house or cave: sprites only in what's drawn (past it there can be other houses'
+      // or caves' put in the same room, which the game keeps going), and past that what's
+      // round it, all the way to the picture's edges (DungeonDrawNeighbors).
+      for (int y = y0; y < y1; y++)
+        ppu->objLeftLine[y - vs] = -l, ppu->objRightLine[y - vs] = 256 + r;
+      continue;
+    }
     if (i > 0 && (l != ppu->extraLeftLine[y0 - 1 - vs] || r != ppu->extraRightLine[y0 - 1 - vs]))
       differ = true;
     memset(&ppu->extraLeftLine[y0 - vs], l, y1 - y0);
@@ -792,18 +863,8 @@ int Widescreen_DungeonSideSpace(int *left, int *right, int *bottom) {
   }
   ppu->extraPerLine = differ;
   *left = most_l, *right = most_r, *bottom = b;
-  if (g_fill) {
-    // A house or cave: on past that, what's round it (DungeonDrawNeighbors), all the way to
-    // the picture's edges. Sprites are kept to what was drawn before: past it there can be
-    // other houses' or caves' put in the same room, which the game keeps going.
-    int lines = 224 + b;
-    for (int y = 0; y < 240; y++) {
-      ppu->objLeftLine[y] = y < lines ? -ppu->extraLeftLine[y] : 0;
-      ppu->objRightLine[y] = y < lines ? 256 + ppu->extraRightLine[y] : 0;
-    }
-    ppu->objPerLine = true, ppu->extraPerLine = false;
-    *left = *right = extra, *bottom = 16;
-  }
+  if (g_fill)
+    ppu->objPerLine = true, *left = *right = extra, *bottom = 16;
   return s;
 }
 
@@ -814,7 +875,7 @@ static void DungeonDrawNeighbors(void) {
   uint16 base2 = ppu->bgLayer[1].tilemapAdr, base1 = ppu->bgLayer[0].tilemapAdr;
   int view = hs + ppu->viewShift;  // where the picture's moved to
   int tx0 = (view - ppu->extraLeftCur) >> 3, tx1 = (view + 256 + ppu->extraRightCur + 7) >> 3;
-  int ty0 = vs >> 3, ty1 = (vs + 224 + ppu->extraBottomCur + 7) >> 3;
+  int ty0 = vs >> 3, ty1 = ((vs + 224 + ppu->extraBottomCur) >> 3) + 1;  // line y shows row vs + y + 1
   for (int tx = tx0; tx < tx1; tx++) {
     int x = tx * 8;
     for (int ty = ty0; ty < ty1; ty++) {
@@ -822,15 +883,18 @@ static void DungeonDrawNeighbors(void) {
       // in the original's picture, if only partly (line y shows row vs + y + 1): the game's own
       if (x + 8 > hs && x < hs + 256 && y + 8 > vs && y <= vs + 224)
         continue;
-      const uint16 *bg = RoomTiles(RoomAt(x, y));
-      bool shown = x >= g_own.x0 && x + 8 <= g_own.x1 && y >= g_own.y0 && y + 8 <= g_own.y1;
+      int room = RoomAt(x, y);
+      const uint16 *bg = RoomTiles(room);
+      const RoomView *p = ShownPart(g_shown, g_num_shown, room);
+      bool shown = !p || (x >= p->x0 && x + 8 <= p->x1 && y >= p->y0 && y + 8 <= p->y1);
       if (bg == kInVram && (!g_fill || shown))
         continue;  // the game's own, shown or (but in houses and caves) not
-      if (bg == NULL || bg == kInVram) {
+      if (bg == NULL || bg == kInVram || !shown) {
         if (g_fill) {  // past what's drawn of a house or cave: what's round it
+          const Surround *sur = room == dungeon_room_index && g_next_surround ? g_next_surround : g_like_surround;
           int ph = SurroundPhase(tx, ty);
-          WriteTile(TilemapAdr(base2, tx, ty), g_surround[0][ph]);
-          WriteTile(TilemapAdr(base1, tx, ty), g_surround[1][ph]);
+          WriteTile(TilemapAdr(base2, tx, ty), sur->tile[0][ph]);
+          WriteTile(TilemapAdr(base1, tx, ty), sur->tile[1][ph]);
         }
         continue;
       }

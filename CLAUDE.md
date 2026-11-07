@@ -115,6 +115,18 @@ purple), at 240 lines the bottom too; walking out of Link's house, the iris as b
 priority 3, drawn over it without `objPerLine` and not with it. Widescreen walks through
 walls from the 12 reference saves identical to the build before (480 shots); 4:3 identical
 to it (34 entrances).
+Scrolls between the rooms of a house or cave, checked off screen 2026-11-07: the lit caves of
+more than one room (entrances found by their rooms' door tables) walked through walls to
+the next room, across (0xf4 to 0xf5 and back, 0xf2 to 0xf3) and up and down (0x08 and
+0x18 both ways, 0x3c to 0x2c), at 224 and 240 lines: against the build before, every side
+black there is now the room or the surround, the picture gliding from its shift in the one
+room to its shift in the next, where it had jumped to the middle (across, and 0x3c, with
+the middle 256 moved with it), and up and down at 224 lines the middle 256 identical; the
+shopkeeper of the room left behind moves with it, as before. 4:3 identical to it (two
+scrolls). The last line's row, against the same: at 224 lines the 102 entrances and a walk
+through walls from the reference saves (432 shots) identical; at 240 lines, of 432 shots of
+that walk and 1092 outdoors, 3 and 33 differ, all on line 239 at the sides, where a strip
+of the wrong tiles is now the room or area.
 
 ## Frame pacing
 
@@ -261,9 +273,19 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   (`Dungeon_LoadRoom` on each). `FindSurround` takes it from the room's edge, the commonest
   pair at each place in the floor's 4x2 pattern. Where black was left in houses and caves
   (a quadrant by itself, or narrower than the picture with a room through a door beside it),
-  `DungeonDrawNeighbors` writes it, and the sides are drawn in full; the shift is as before,
-  worked out from what's really drawn. Line 223 shows BG row `vs + 224` (the SNES draws line
-  y from row y + 1), which is the game's own, so that row of the 256 isn't written. Sprites
+  `DungeonDrawNeighbors` writes it, and the sides are drawn in full; the shift is worked out
+  from what's really drawn, but not clamped to it at the draw (`g_fill`: nothing's black).
+  Line 223 shows BG row `vs + 224` (the SNES draws line y from row y + 1), which is the
+  game's own, so that row of the 256 isn't written; but at the sides it is, as is row `vs +
+  240` for line 239 with extend_y, here and outdoors (both loops stopped a row short when
+  `vs` was a multiple of 8, leaving a line of whatever the tilemap held). Scrolling over to
+  the next room (submodule 2) the tilemaps hold some of each room, and the other houses or
+  caves put in them, so `g_shown` has what's shown of both: of the room it's leaving as it
+  was while Link was in it (`g_seen_view`), and of the one it's going to as it will be once
+  there (`ScrollEndView`: `room_bounds` move at the transition's start, `quadrant_fullsize`
+  only in its State3, which is near enough, as before the camera moves only the quadrant by
+  the door shows); past them the surround, the new room's own (`FindSurround` keeps two).
+  The shift glides as in a palace (upstream's sides jumped it to the middle and back). Sprites
   aren't drawn past what was drawn before: past the quadrant are other houses, whose people
   the game keeps going within `ExtendScreenMargin()` (rooms 0x10c, 0x112, 0x11f have them
   64 to 68 out at the door), so the PPU keeps sprites to each line's old sides
@@ -296,10 +318,10 @@ to 63 get the map again, and M7SEL wraps (`Ppu.m7largeField` false; the game nev
 M7SEL, and upstream's PPU starts with it set), which the 4x renderer now honours: the map
 repeats every 512. Rows past 63 aren't reached (the top line's at y 48 or more).
 
-Still black (not done): briefly past a wall in a vertical scroll in a palace (above), and
-in houses and caves while scrolling to the next room (upstream's sides then); dark rooms
-past the original's picture; with 240 lines, the 16 past the world's bottom edge; past
-the 256 as an iris closes or opens (the spotlight, death), the game's window being 8-bit.
+Still black (not done): briefly past a wall in a vertical scroll in a palace (above); dark
+rooms past the original's picture; with 240 lines, the 16 past the world's bottom edge;
+past the 256 as an iris closes or opens (the spotlight, death), the game's window being
+8-bit.
 And at 18:9 with 240 lines, everywhere, the 32 at the right: that asks for 112 a side,
 which upstream's PPU caps at 96 (`kPpuExtraLeftRight`), so it draws 448 of the 480.
 
