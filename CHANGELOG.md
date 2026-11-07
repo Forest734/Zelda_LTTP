@@ -70,6 +70,10 @@ fork of. The format is based on [Keep a Changelog](https://keepachangelog.com/en
   he's there.
 - In widescreen, the dungeon's map fills the screen: the wooden board its two frames sit on
   goes on across the sides, where upstream's widescreen showed black.
+- In widescreen, a house or cave narrower than the screen (most of them: Link's house, the
+  shops, the caves of one chamber) sits in what's round it, the dark brown (or green, or
+  tan...) going on to the edges of the screen, where upstream's widescreen showed black
+  bars. The people and creatures of other houses and caves nearby stay out of sight.
 - Sharp bilinear scaling in the window, `LinearFiltering = Sharp` in `zelda3.ini` (SMB's):
   the picture is scaled up by the largest whole number that fits and blended only for the
   rest, so in fullscreen or a resized window every dot is the same size and scrolling

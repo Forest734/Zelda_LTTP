@@ -62,6 +62,11 @@ struct Ppu {
   // where the rooms above and below differ. Only the new renderer.
   bool extraPerLine;
   uint8_t extraLeftLine[240], extraRightLine[240];
+  // [lttp] With objPerLine, sprites are drawn on each line (by its y on screen) only from x
+  // objLeftLine to objRightLine (the 256 from 0 to 256): widescreen in houses and caves, where
+  // what's round the room is drawn past it. Only the new renderer.
+  bool objPerLine;
+  int16_t objLeftLine[240], objRightLine[240];
   // [lttp] BG3 drawn at the sides too, where upstream keeps it to the 256 (the HUD and the
   // menus): widescreen, on the dungeon's map, whose board BG3 is. Only the new renderer.
   bool extraBg3;

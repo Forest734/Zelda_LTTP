@@ -106,6 +106,15 @@ set from the overworld) choosing and fading out; the attract sequence's map fadi
 4x and 1x (`EnhancedMode7 = 0`), at 16:9 and at 18:9 with 240 lines: against the build
 before, every pixel that changed had been black (or at 1x the junk tile), none left at
 the top, the sky seamless across the map's edges; 4:3 identical to it (42 shots).
+Houses and caves (below), checked off screen the same day: all 102 house and cave entrances
+(`ref 1`, then `which_entrance`) against the build before: the middle 256 identical, and
+every side that changed had been black and is now the surround (brown, green, tan, maroon,
+purple), at 240 lines the bottom too; walking out of Link's house, the iris as before
+(black past the 256). Rooms 0x10c, 0x112 and 0x11f have another house's or cave's creatures
+64 to 68 past the quadrant: hidden by the surround at their priority 2, and forced to
+priority 3, drawn over it without `objPerLine` and not with it. Widescreen walks through
+walls from the 12 reference saves identical to the build before (480 shots); 4:3 identical
+to it (34 entrances).
 
 ## Frame pacing
 
@@ -178,7 +187,8 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   layer setup in the room header, and not lights-out. In houses and caves
   (`cur_palace_index_x2 == 0xff`) the grid means nothing, so only a room through a door
   (both door tables, as `Dungeon_CheckAdjacentRoomsForOpenDoors`), and of the room itself
-  only the quadrant the camera's kept to: houses share a supertile, one a quadrant.
+  only the quadrant the camera's kept to: houses share a supertile, one a quadrant (what's
+  round them fills the rest: houses and caves, below).
   `room_bounds_x/y` are `{a0, b0, a1, b1}`, `a` the camera's bounds in a quadrant, `b` in
   the whole room; `ConfigurePpuSideSpace`'s fallback uses `b` in palaces. While scrolling to
   the next room (submodule 2) the old room is drawn from a copy taken while Link was in it
@@ -245,6 +255,23 @@ pixels further out (`kFeatures0_ExtendScreen64`). Ours, in `src/widescreen.c`:
   up, so the backdrop and shift are held for one frame after 18 (`g_after_death`). The
   revival fairy fades the picture back in where it was. The iris is the game's, 8-bit, so
   it only ever covers the 256 (as the spotlight's).
+- **Houses and caves.** What's round a house or cave is BG2's tile 0x3c15 (brown, green,
+  tan... by the palette; BG priority 1) with BG1's floor 1 under it, all through the room
+  but where something's drawn: so at the edges of all 0x140 rooms but four palace rooms
+  (`Dungeon_LoadRoom` on each). `FindSurround` takes it from the room's edge, the commonest
+  pair at each place in the floor's 4x2 pattern. Where black was left in houses and caves
+  (a quadrant by itself, or narrower than the picture with a room through a door beside it),
+  `DungeonDrawNeighbors` writes it, and the sides are drawn in full; the shift is as before,
+  worked out from what's really drawn. Line 223 shows BG row `vs + 224` (the SNES draws line
+  y from row y + 1), which is the game's own, so that row of the 256 isn't written. Sprites
+  aren't drawn past what was drawn before: past the quadrant are other houses, whose people
+  the game keeps going within `ExtendScreenMargin()` (rooms 0x10c, 0x112, 0x11f have them
+  64 to 68 out at the door), so the PPU keeps sprites to each line's old sides
+  (`Ppu.objPerLine`, `objLeftLine`, `objRightLine`, in `ppu_evaluateSprites`). At the usual
+  OBJ priority 2 the surround tile hides them anyway; it's for priority 3. The camera's kept
+  to a quadrant across only where nothing joins it to the next: over every room, no half
+  the layout keeps it to (`kLayoutQuadrantFlags`) has floor or door either side of the
+  middle line but two palace rooms' (0x0d, 0x20), which show all of the room anyway.
 
 Also: `MosaicRun` (ppu.c) gives mosaic blocks left of the 256, where upstream read before
 `mosaicModulo` and streaked the extra space in mosaic fades; the flute's map (interface
@@ -269,13 +296,12 @@ to 63 get the map again, and M7SEL wraps (`Ppu.m7largeField` false; the game nev
 M7SEL, and upstream's PPU starts with it set), which the 4x renderer now honours: the map
 repeats every 512. Rows past 63 aren't reached (the top line's at y 48 or more).
 
-Still black (not done): where what's drawn round a dungeon room is narrower than the
-picture (a house or cave quadrant by itself), and briefly past a wall in a vertical
-scroll (above); dark rooms past the original's picture; with 240 lines, the 16 past the
-world's bottom edge; past the 256 as an iris closes or opens (the spotlight, death), the
-game's window being 8-bit. And at 18:9 with 240 lines, everywhere, the 32 at the right:
-that asks for 112 a side, which upstream's PPU caps at 96 (`kPpuExtraLeftRight`), so it
-draws 448 of the 480.
+Still black (not done): briefly past a wall in a vertical scroll in a palace (above), and
+in houses and caves while scrolling to the next room (upstream's sides then); dark rooms
+past the original's picture; with 240 lines, the 16 past the world's bottom edge; past
+the 256 as an iris closes or opens (the spotlight, death), the game's window being 8-bit.
+And at 18:9 with 240 lines, everywhere, the 32 at the right: that asks for 112 a side,
+which upstream's PPU caps at 96 (`kPpuExtraLeftRight`), so it draws 448 of the 480.
 
 Sprites (`kFeatures0_ExtendScreen64`): upstream keeps them active, and draws ancillae, 64
 pixels past either side of the 256, 7 short of 16:9's 71, so arrows and the like vanished

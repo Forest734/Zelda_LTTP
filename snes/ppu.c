@@ -37,6 +37,7 @@ Ppu* ppu_init() {
   Ppu* ppu = (Ppu * )malloc(sizeof(Ppu));
   ppu->extraLeftRight = kPpuExtraLeftRight;
   ppu->renderFlags = 0, ppu->viewShift = 0, ppu->extraPerLine = false;  // [lttp]
+  ppu->objPerLine = false;  // [lttp]
   return ppu;
 }
 
@@ -51,7 +52,7 @@ void ppu_reset(Ppu* ppu) {
   ppu->extraLeftCur = 0;
   ppu->extraRightCur = 0;
   ppu->extraBottomCur = 0;
-  ppu->viewShift = 0, ppu->extraPerLine = false;  // [lttp]
+  ppu->viewShift = 0, ppu->extraPerLine = false, ppu->objPerLine = false;  // [lttp]
   ppu->vramPointer = 0;
   ppu->vramIncrementOnHigh = false;
   ppu->vramIncrement = 1;
@@ -1273,6 +1274,10 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
   //   then iterate those in-range sprites in reverse for tile-fetching
   // TODO: rectangular sprites, wierdness with sprites at -256
   int index = 0, index_end = index;
+  // [lttp] only from objLeftLine to objRightLine on this line, with objPerLine
+  int clip_left = -kPpuExtraLeftRight, clip_right = 256 + kPpuExtraLeftRight;
+  if (ppu->objPerLine && (unsigned)line < countof(ppu->objLeftLine))
+    clip_left = ppu->objLeftLine[line], clip_right = ppu->objRightLine[line];
   int spritesLeft = 32 + 1, tilesLeft = 34 + 1;
   uint8 spriteSizes[2] = { kSpriteSizes[ppu->objSize][0], kSpriteSizes[ppu->objSize][1] };
   int extra_left_right = ppu->extraLeftRight;
@@ -1324,8 +1329,10 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
         uint16 *addr = &ppu->vram[(objAdr + usedTile * 16 + (row & 0x7)) & 0x7fff];
         uint32 plane = addr[0] | addr[8] << 16;
         // go over each pixel
-        int px_left = IntMax(-(col + x + kPpuExtraLeftRight), 0);
-        int px_right = IntMin(256 + kPpuExtraLeftRight - (col + x), 8);
+        int px_left = IntMax(clip_left - (col + x), 0);  // [lttp] upstream: -kPpuExtraLeftRight
+        int px_right = IntMin(clip_right - (col + x), 8);  // [lttp] upstream: 256 + kPpuExtraLeftRight
+        if (px_left >= px_right)
+          continue;  // [lttp] clipped (objPerLine)
         PpuZbufType *dst = ppu->objBuffer.data + col + x + px_left + kPpuExtraLeftRight;
         
         for (int px = px_left; px < px_right; px++, dst++) {
